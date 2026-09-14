@@ -424,6 +424,9 @@
 
   <p class="template-note" id="templateNote" style="display:none;">Using a shared custom template</p>
 
+  <audio id="bgMusic" src="sounds/lofi-loop.mp3" loop preload="auto"></audio>
+  <button id="musicToggle" class="ghost" type="button" style="display:none;">🎵 Music: off</button>
+
   <details class="customize" id="customize" open>
     <summary>Customize your strip</summary>
 
@@ -536,6 +539,8 @@ const copyLinkBtn = document.getElementById('copyLinkBtn');
 const qrOutput = document.getElementById('qrOutput');
 const templateNote = document.getElementById('templateNote');
 const customizeDetails = document.getElementById('customize');
+const bgMusic = document.getElementById('bgMusic');
+const musicToggle = document.getElementById('musicToggle');
 const captionPreview = document.getElementById('captionPreview');
 const dateStyleField = document.getElementById('dateStyleField');
 const dateStyleSelect = document.getElementById('dateStyleSelect');
@@ -618,6 +623,22 @@ function readConfigFromURL() {
   return match ? decodeConfig(match[1]) : null;
 }
 
+// Background music toggle — only offered on a shared/customized template
+// link, per the request. Autoplay-with-sound is blocked by most browsers
+// until the user interacts with the page, so the initial play() below will
+// usually be silently rejected; the toggle's label tracks bgMusic's actual
+// play/pause state (not the attempt), so it's always accurate regardless of
+// whether autoplay succeeded.
+function updateMusicToggleLabel() {
+  musicToggle.textContent = bgMusic.paused ? '🎵 Music: off' : '🎵 Music: on';
+}
+bgMusic.addEventListener('play', updateMusicToggleLabel);
+bgMusic.addEventListener('pause', updateMusicToggleLabel);
+musicToggle.addEventListener('click', () => {
+  if (bgMusic.paused) bgMusic.play().catch(() => {});
+  else bgMusic.pause();
+});
+
 const shared = readConfigFromURL();
 if (shared) {
   applyConfig(shared);
@@ -626,6 +647,8 @@ if (shared) {
   // are locked to whatever the creator set. Only the date format (not the
   // caption itself) stays adjustable, via #dateStyleField below.
   customizeDetails.style.display = 'none';
+  musicToggle.style.display = 'inline-block';
+  bgMusic.play().catch(() => {});
 } else {
   applyConfig(config);
 }

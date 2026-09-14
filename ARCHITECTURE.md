@@ -14,6 +14,7 @@ A browser-based photobooth ("Portabooth" — formerly named "Snapstrip" in-app; 
 - `qrcode.min.js` — vendored third-party QR code generator (davidshimjs/qrcodejs, MIT), loaded via a local `<script src>` tag. See "Custom template sharing" below for why it's vendored instead of a CDN `<script>` tag.
 - `fonts/Unna-{Regular,Bold,Italic,BoldItalic}.ttf` — vendored Unna typeface (SIL Open Font License, `fonts/Unna-OFL.txt`), used for the caption/date drawn onto the exported strip. Vendored for the same reason as the QR library: no third-party dependency at runtime.
 - `sounds/shutter.mp3` — vendored camera-shutter sound effect (user-supplied download, ~1s, no license file included alongside it — unlike the font/QR library, there's no bundled license text to point to if this is ever redistributed beyond this repo), played on each shot.
+- `sounds/lofi-loop.mp3` — vendored background music loop (user-supplied download, ~22s, same no-license-file caveat as the shutter sound), looped on shared/customized template links only — see "Recipient lockdown" below.
 - `README.md` — one-line project blurb.
 - No package.json, no framework, no bundler. Opening the HTML file in a browser (or serving it statically) is the whole deploy story.
 
@@ -23,6 +24,7 @@ Deliberate choice, not a placeholder: [conversation with the project owner](.) c
 
 ### Layout (HTML)
 - `#templateNote` — one-line "Using a shared custom template" indicator, shown only when the page was opened via a link/QR that encodes a saved template (see below).
+- `#bgMusic` (`<audio loop>`) / `#musicToggle` — background music loop and its on/off toggle button, both only shown/active on a shared template link — see "Background music" below.
 - `.customize` (`<details open>`) — the template editor: site-theme `<select>`, caption `<input>`, Bold/Italic style checkboxes, show-date checkbox, a live `#captionPreview` canvas, and the "Get shareable link" flow (link `<input readonly>` + copy button + `#qrOutput` QR code container). Expanded by default (`open` attribute) so a first-time visitor lands on customization, not the camera — still collapsible via the `<summary>`. Hidden entirely for shared-link recipients regardless of `open`, via `customizeDetails.style.display = 'none'` (see "Custom template sharing" below).
 - `.stage` — the live camera view: `<video>` element (mirrored front camera feed), flash overlay, countdown overlay, shot counter (`0 / 4` etc.), and the Start/Retake buttons.
 - `#permHint` — camera-permission helper text shown before capture / on `getUserMedia` failure.
@@ -78,6 +80,8 @@ Because of this choice, current "frames" are limited to the built-in `SITE_THEME
 `qrcode.min.js` is vendored (copied into the repo) rather than loaded from a CDN `<script src>` specifically to preserve the app's "everything runs on your device, no network dependency beyond the camera" property — a CDN script would make template rendering depend on a third party being up.
 
 **Recipient lockdown.** When the page is opened via a shared link (i.e. `readConfigFromURL()` returns a config), `#customize` is hidden entirely (`customizeDetails.style.display = 'none'`) — the recipient gets the creator's theme/caption/style/date-visibility exactly as set, with no UI path to change any of it, including the caption. The one exception is **date format** (`'long'` vs `'numeric'`, via `#dateStyleField`/`dateStyle`): this is deliberately kept *outside* `config`/the shared URL, so it's a free choice for whoever is using the page — creator or recipient — available once a strip has been captured. If a future request asks to lock the date format too, or to let recipients edit more than that, the config shape and the `customizeDetails.style.display = 'none'` line above are the places to revisit.
+
+**Background music.** Also gated on the same `shared` check: `#musicToggle` (hidden on the plain main page) and `#bgMusic` (a looping `<audio>` pointed at `sounds/lofi-loop.mp3`) only appear/activate on a shared/customized template link. On load, `bgMusic.play()` is attempted immediately but will usually be silently rejected by the browser's autoplay-with-sound policy on a cold visit — this is expected, not a bug. `updateMusicToggleLabel()` tracks the audio element's real `play`/`pause` events rather than the play() *attempt*, so the toggle's "on"/"off" label is always accurate even when autoplay was blocked; clicking it is a genuine user gesture, so it reliably starts or stops playback regardless of whether the initial autoplay succeeded. Like `shutterAudio`, this is a plain `HTMLAudioElement`, not tied to the Web Audio API.
 
 ### Mobile-specific details already handled
 - `playsinline muted autoplay` on `<video>` — required for iOS Safari to render the camera feed inline instead of forcing fullscreen.
