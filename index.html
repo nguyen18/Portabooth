@@ -452,83 +452,14 @@
     z-index: 1;
   }
 
-  /* Print: two copies of the strip side by side on a 4x6" photo sheet —
-     the standard way a photobooth strip gets printed, cut down the middle. */
-  @page {
-    size: 4in 6in;
-    margin: 0;
-  }
-
-  .print-sheet {
-    display: none;
-  }
-
-  @media print {
-    /* visibility:hidden alone isn't enough — hidden elements still occupy
-       layout space, so the browser paginates the entire normal page (which
-       is much taller than a 4x6" sheet) into extra blank pages. display:none
-       actually removes them from the flow, leaving only #printSheet, sized
-       to exactly fill one page. */
-    body > *:not(.print-sheet) {
-      display: none !important;
-    }
-    .print-sheet {
-      display: flex;
-      width: 4in;
-      height: 6in;
-      margin: 0;
-      align-items: center;
-      justify-content: center;
-    }
-    /* Sized smaller than the full 4x6" page (not a literal 2in x 6in), on
-       purpose: many mobile print pipelines (iOS AirPrint, Android print
-       services) enforce their own unprintable margin even when @page says
-       margin: 0 — desktop's print-to-PDF/driver path is more literal about
-       honoring it. This margin comes from the OS/print-service pipeline,
-       NOT the printer itself — e.g. the Liene M100 (a printer this was
-       reported against) only needs ~1mm of its own bleed margin for
-       borderless printing, far less than the buffer below, confirming the
-       cutoff isn't about matching a specific printer's spec. That pipeline
-       margin isn't published anywhere and can't be queried from the page,
-       so this is tuned empirically with headroom rather than calculated
-       exactly: first pass (2in x 6in, no margin) still got cut off onto a
-       second page; second pass (1.9in x 5.8in, ~3% smaller) still showed a
-       little cutoff in print preview. This third pass roughly doubles that
-       buffer. If it's still not enough on some device, increase further —
-       there's no way to derive the exact right number without testing on
-       that specific phone/printer/OS combination. */
-    /* One combined image now (both strips drawn side by side onto a single
-       canvas in buildPrintCanvas() — see there for why: sharing one outer
-       border and one dashed dividing line instead of each strip carrying
-       its own full border), so this is double the single-strip width from
-       before, same height and margin proportions. */
-    .print-sheet img {
-      width: 3.6in;
-      height: 5.6in;
-      object-fit: contain;
-    }
-    /* body's own padding/background still apply otherwise (it isn't hidden,
-       only its children are) and would push #printSheet off the page edges
-       or waste part of the 4x6" sheet. body::before (the curtain texture) is
-       a pseudo-element, not a DOM child, so the `>*` rule above doesn't
-       catch it either — hide it explicitly. */
-    body {
-      padding: 0;
-      background: #fff;
-    }
-    body::before {
-      display: none;
-    }
-    /* Belt-and-suspenders: some mobile WebKit versions render a <video>
-       with a live camera stream via a separate hardware-compositing layer
-       that doesn't reliably respect display:none inherited from an
-       ancestor during print — it can show through as a solid-color block
-       on top of the print output. Target it directly, in addition to
-       actually detaching the stream in JS (see beforeprint/afterprint). */
-    video {
-      display: none !important;
-    }
-  }
+  /* Note: there is deliberately no @media print / @page CSS here anymore.
+     "Print" now generates a real standalone PDF (via jsPDF) instead of
+     using window.print() on the live page — see printBtn's handler and
+     ARCHITECTURE.md "Print layout" for why: the browser/OS print pipeline
+     for printing a *webpage* unavoidably injects its own header/footer
+     (URL, date, page count) and its own unprintable margins that can't be
+     fully controlled from CSS, which a self-generated PDF file sidesteps
+     entirely. */
 </style>
 </head>
 <body>
@@ -632,15 +563,15 @@
     <div class="save-row">
       <button id="saveBtn">Save to device</button>
       <button id="shareBtn" class="ghost" style="display:none;">Share</button>
-      <button id="printBtn" class="ghost">Print</button>
+      <button id="printBtn" class="ghost">Download PDF</button>
       <button id="againBtn" class="ghost">New strip</button>
     </div>
   </div>
 
   <canvas id="workCanvas" style="display:none;"></canvas>
-  <div class="print-sheet" id="printSheet"></div>
 
 <script src="qrcode.min.js"></script>
+<script src="jspdf.umd.min.js"></script>
 <script>
 const video = document.getElementById('video');
 const flipCameraBtn = document.getElementById('flipCameraBtn');
@@ -657,7 +588,6 @@ const permHint = document.getElementById('permHint');
 const saveBtn = document.getElementById('saveBtn');
 const shareBtn = document.getElementById('shareBtn');
 const printBtn = document.getElementById('printBtn');
-const printSheet = document.getElementById('printSheet');
 const againBtn = document.getElementById('againBtn');
 
 const siteThemeSelect = document.getElementById('siteThemeSelect');
@@ -1238,43 +1168,35 @@ saveBtn.addEventListener('click', () => {
   });
 });
 
+// "Print" generates a real, standalone PDF file instead of using
+// window.print() on the live page. window.print() (even choosing "Save as
+// PDF" as its destination) still goes through the browser's "print this
+// webpage" pipeline, which unavoidably injects its own header/footer (URL,
+// date, page count) and its own unprintable margins — neither controllable
+// from CSS/JS, as the earlier print-formatting fixes in this file's history
+// ran into repeatedly. Building the PDF ourselves with jsPDF sidesteps that
+// pipeline entirely: the visitor downloads a real PDF with only our content
+// in it, and prints it later from a PDF viewer (Preview, Acrobat, their
+// phone's Files app, etc.), which doesn't carry any of that webpage-print
+// baggage.
 printBtn.addEventListener('click', async () => {
-  // One combined canvas with both strips side by side (see
-  // buildPrintCanvas()), sharing one outer border and one dashed line down
-  // the middle — rebuilt fresh each print so it always reflects the
-  // current strip.
   const printCanvas = await buildPrintCanvas();
   const dataUrl = printCanvas.toDataURL('image/png');
-  printSheet.innerHTML = '';
-  const img = document.createElement('img');
-  img.src = dataUrl;
-  printSheet.appendChild(img);
-  // Setting img.src doesn't mean the image has actually decoded/painted yet
-  // — calling window.print() immediately can capture the page before that
-  // happens, showing a correctly-sized but empty box until the user cancels
-  // and reprints. Wait for it to actually be ready first.
-  await (img.decode ? img.decode().catch(() => {}) : new Promise(resolve => {
-    if (img.complete) resolve();
-    else { img.onload = resolve; img.onerror = resolve; }
-  }));
-  window.print();
-});
 
-// Actually detach the live camera stream during printing, not just hide the
-// <video> via CSS — some mobile WebKit versions render a video element with
-// an active stream through a separate hardware-compositing layer that can
-// show through the print output as a solid-color block even when its
-// ancestors are display:none. Reattaching afterprint resumes the same
-// stream (no new getUserMedia prompt). beforeprint/afterprint fire whether
-// the visitor actually prints or cancels the dialog.
-window.addEventListener('beforeprint', () => {
-  if (video.srcObject) video.srcObject = null;
-});
-window.addEventListener('afterprint', () => {
-  if (stream && !video.srcObject) {
-    video.srcObject = stream;
-    video.play().catch(() => {});
-  }
+  const PAGE_W_IN = 4, PAGE_H_IN = 6;
+  const MARGIN_IN = 0.2; // matches the safety margin the old print CSS used
+  const maxW = PAGE_W_IN - MARGIN_IN * 2;
+  const maxH = PAGE_H_IN - MARGIN_IN * 2;
+  const imgAspect = printCanvas.width / printCanvas.height;
+  let drawW = maxW, drawH = maxW / imgAspect;
+  if (drawH > maxH) { drawH = maxH; drawW = maxH * imgAspect; }
+  const x = (PAGE_W_IN - drawW) / 2;
+  const y = (PAGE_H_IN - drawH) / 2;
+
+  const { jsPDF } = window.jspdf;
+  const doc = new jsPDF({ unit: 'in', format: [PAGE_W_IN, PAGE_H_IN], orientation: 'portrait' });
+  doc.addImage(dataUrl, 'PNG', x, y, drawW, drawH);
+  doc.save(`portabooth-${Date.now()}.pdf`);
 });
 
 if (navigator.canShare) {
