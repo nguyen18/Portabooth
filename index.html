@@ -657,15 +657,42 @@ function readConfigFromURL() {
 // usually be silently rejected; the toggle's label tracks bgMusic's actual
 // play/pause state (not the attempt), so it's always accurate regardless of
 // whether autoplay succeeded.
+// Music defaults to on. The toggle's label reflects this *intent*, not the
+// audio element's live paused state — actual playback often can't start
+// immediately (see below), and showing "on" from the start matches what the
+// visitor asked for rather than exposing autoplay-policy internals to them.
+let musicUserDisabled = false;
+
 function updateMusicToggleLabel() {
-  musicToggle.textContent = bgMusic.paused ? '🎵 Music: off' : '🎵 Music: on';
+  musicToggle.textContent = musicUserDisabled ? '🎵 Music: off' : '🎵 Music: on';
 }
-bgMusic.addEventListener('play', updateMusicToggleLabel);
-bgMusic.addEventListener('pause', updateMusicToggleLabel);
+
+function applyMusicIntent() {
+  if (musicUserDisabled) bgMusic.pause();
+  else bgMusic.play().catch(() => {});
+  updateMusicToggleLabel();
+}
+
 musicToggle.addEventListener('click', () => {
-  if (bgMusic.paused) bgMusic.play().catch(() => {});
-  else bgMusic.pause();
+  musicUserDisabled = !musicUserDisabled;
+  applyMusicIntent();
 });
+
+// Browsers block autoplay-with-sound until the visitor interacts with the
+// page at all — not necessarily the music toggle itself. So start it on the
+// first interaction of any kind (click, tap, keypress) elsewhere on the
+// page. The toggle itself is excluded: it already handles its own click via
+// applyMusicIntent() above, and pointerdown-before-click ordering would
+// otherwise race with it (this handler starting playback, then the toggle's
+// click handler immediately reversing it).
+function tryStartMusicOnFirstInteraction(e) {
+  if (e.target === musicToggle || musicToggle.contains(e.target)) return;
+  document.removeEventListener('pointerdown', tryStartMusicOnFirstInteraction);
+  document.removeEventListener('keydown', tryStartMusicOnFirstInteraction);
+  if (!musicUserDisabled && bgMusic.paused) bgMusic.play().catch(() => {});
+}
+document.addEventListener('pointerdown', tryStartMusicOnFirstInteraction);
+document.addEventListener('keydown', tryStartMusicOnFirstInteraction);
 
 const shared = readConfigFromURL();
 if (shared) {
@@ -679,11 +706,11 @@ if (shared) {
   applyConfig(config);
 }
 
-// Background music + its on/off toggle are available on every page, not just
-// shared links — see updateMusicToggleLabel() above for how the toggle's
-// label stays accurate even if this initial autoplay attempt is blocked.
+// Background music + its on/off toggle are available on every page, not
+// just shared links, and default to on — see applyMusicIntent() above for
+// how actual playback catches up as soon as it's technically allowed.
 musicToggle.style.display = 'inline-block';
-bgMusic.play().catch(() => {});
+applyMusicIntent();
 
 async function startCamera(mode) {
   const requested = mode;
