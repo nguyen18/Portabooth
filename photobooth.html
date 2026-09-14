@@ -5,6 +5,31 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Snapstrip</title>
 <style>
+  @font-face {
+    font-family: 'Unna';
+    src: url('fonts/Unna-Regular.ttf') format('truetype');
+    font-weight: 400;
+    font-style: normal;
+  }
+  @font-face {
+    font-family: 'Unna';
+    src: url('fonts/Unna-Bold.ttf') format('truetype');
+    font-weight: 700;
+    font-style: normal;
+  }
+  @font-face {
+    font-family: 'Unna';
+    src: url('fonts/Unna-Italic.ttf') format('truetype');
+    font-weight: 400;
+    font-style: italic;
+  }
+  @font-face {
+    font-family: 'Unna';
+    src: url('fonts/Unna-BoldItalic.ttf') format('truetype');
+    font-weight: 700;
+    font-style: italic;
+  }
+
   :root {
     --curtain: #2b1518;
     --curtain-dark: #1a0d0f;
@@ -170,6 +195,19 @@
     margin-bottom: 14px;
   }
 
+  .style-toggle-row {
+    display: flex;
+    gap: 16px;
+    margin-bottom: 14px;
+  }
+
+  .style-toggle-row label {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 0.85rem;
+  }
+
   .share-output {
     margin-top: 14px;
     padding-top: 14px;
@@ -322,7 +360,8 @@
   }
 
   .strip-frame {
-    background: var(--paper);
+    /* the strip itself always stays plain white, independent of site theme */
+    background: #ffffff;
     padding: 14px;
     border-radius: 2px;
     box-shadow: 0 10px 30px rgba(0,0,0,0.5), 0 0 0 1px rgba(0,0,0,0.08);
@@ -376,8 +415,8 @@
     <summary>Customize your strip</summary>
 
     <div class="field">
-      <label for="themeSelect">Frame theme</label>
-      <select id="themeSelect">
+      <label for="siteThemeSelect">Site theme</label>
+      <select id="siteThemeSelect">
         <option value="classic">Classic</option>
         <option value="noir">Noir</option>
         <option value="blush">Blush</option>
@@ -388,6 +427,11 @@
     <div class="field">
       <label for="captionInput">Caption</label>
       <input type="text" id="captionInput" maxlength="40" value="Snapstrip">
+    </div>
+
+    <div class="style-toggle-row">
+      <label><input type="checkbox" id="boldInput"> Bold</label>
+      <label><input type="checkbox" id="italicInput"> Italic</label>
     </div>
 
     <label class="checkbox-row">
@@ -425,6 +469,13 @@
     <div class="strip-frame">
       <canvas id="stripCanvas"></canvas>
     </div>
+    <div class="field" id="dateStyleField">
+      <label for="dateStyleSelect">Date style</label>
+      <select id="dateStyleSelect">
+        <option value="long">Sep 14, 2026</option>
+        <option value="numeric">9.14.26</option>
+      </select>
+    </div>
     <div class="save-row">
       <button id="saveBtn">Save to device</button>
       <button id="shareBtn" class="ghost" style="display:none;">Share</button>
@@ -453,8 +504,10 @@ const shareBtn = document.getElementById('shareBtn');
 const printBtn = document.getElementById('printBtn');
 const againBtn = document.getElementById('againBtn');
 
-const themeSelect = document.getElementById('themeSelect');
+const siteThemeSelect = document.getElementById('siteThemeSelect');
 const captionInput = document.getElementById('captionInput');
+const boldInput = document.getElementById('boldInput');
+const italicInput = document.getElementById('italicInput');
 const showDateInput = document.getElementById('showDateInput');
 const getLinkBtn = document.getElementById('getLinkBtn');
 const shareOutput = document.getElementById('shareOutput');
@@ -462,34 +515,55 @@ const shareLinkInput = document.getElementById('shareLink');
 const copyLinkBtn = document.getElementById('copyLinkBtn');
 const qrOutput = document.getElementById('qrOutput');
 const templateNote = document.getElementById('templateNote');
+const customizeDetails = document.getElementById('customize');
+const dateStyleField = document.getElementById('dateStyleField');
+const dateStyleSelect = document.getElementById('dateStyleSelect');
 
 const SHOT_COUNT = 4;
 const FRAME_W = 500;   // px per photo cell at capture resolution
 const FRAME_H = 375;   // 4:3
 const PADDING = 20;
 const GAP = 14;
-const CAPTION_H = 46;  // reserved canvas height for the caption/date line
 
-const THEMES = ['classic', 'noir', 'blush', 'mint'];
+// The strip itself always prints on plain white paper with dark ink, regardless
+// of the site theme — only the surrounding website chrome follows the theme.
+const STRIP_PAPER = '#ffffff';
+const STRIP_INK = '#241412';
+const CAPTION_FONT_SIZE = 30;
+const DATE_FONT_SIZE = 20;
+const CAPTION_LINE_GAP = 10;
+const CAPTION_PAD = 18; // top/bottom padding around the caption block
+
+// Site theme = the website's own color scheme (curtain/bulb/brass/etc). It no
+// longer affects the exported photo strip, which always stays white/dark ink.
+const SITE_THEMES = ['classic', 'noir', 'blush', 'mint'];
 
 let stream = null;
 let shots = [];
-let config = { theme: 'classic', caption: 'Snapstrip', showDate: true };
+let config = { siteTheme: 'classic', caption: 'Snapstrip', bold: false, italic: false, showDate: true };
 
-function applyTheme(theme) {
-  if (theme === 'classic') {
+// Date format is deliberately NOT part of the shared config — unlike the
+// caption, it stays a free choice for whoever is using the page right now
+// (including someone who opened a shared link), available once a strip exists.
+let dateStyle = 'long';
+
+function applySiteTheme(siteTheme) {
+  if (siteTheme === 'classic') {
     document.documentElement.removeAttribute('data-theme');
   } else {
-    document.documentElement.setAttribute('data-theme', theme);
+    document.documentElement.setAttribute('data-theme', siteTheme);
   }
 }
 
 function applyConfig(cfg) {
   config = cfg;
-  applyTheme(config.theme);
-  themeSelect.value = config.theme;
+  applySiteTheme(config.siteTheme);
+  siteThemeSelect.value = config.siteTheme;
   captionInput.value = config.caption;
+  boldInput.checked = config.bold;
+  italicInput.checked = config.italic;
   showDateInput.checked = config.showDate;
+  dateStyleField.style.display = config.showDate ? '' : 'none';
 }
 
 // Template sharing: the whole customization (theme + caption + date toggle) is
@@ -506,8 +580,10 @@ function decodeConfig(str) {
     const json = decodeURIComponent(escape(atob(str)));
     const parsed = JSON.parse(json);
     return {
-      theme: THEMES.includes(parsed.theme) ? parsed.theme : 'classic',
+      siteTheme: SITE_THEMES.includes(parsed.siteTheme) ? parsed.siteTheme : 'classic',
       caption: typeof parsed.caption === 'string' ? parsed.caption.slice(0, 40) : 'Snapstrip',
+      bold: !!parsed.bold,
+      italic: !!parsed.italic,
       showDate: !!parsed.showDate
     };
   } catch (e) {
@@ -524,6 +600,10 @@ const shared = readConfigFromURL();
 if (shared) {
   applyConfig(shared);
   templateNote.style.display = 'block';
+  // Recipients of a shared template use it as-is — theme, caption, and style
+  // are locked to whatever the creator set. Only the date format (not the
+  // caption itself) stays adjustable, via #dateStyleField below.
+  customizeDetails.style.display = 'none';
 } else {
   applyConfig(config);
 }
@@ -583,15 +663,37 @@ function captureFrame() {
   return c;
 }
 
-function buildStrip() {
-  const styles = getComputedStyle(document.documentElement);
-  const paperColor = styles.getPropertyValue('--paper').trim();
-  const inkColor = styles.getPropertyValue('--ink').trim();
+function captionFont(size) {
+  const style = config.italic ? 'italic ' : '';
+  const weight = config.bold ? 'bold ' : '';
+  return `${style}${weight}${size}px Unna, Georgia, serif`;
+}
 
-  const now = new Date();
-  const dateStr = now.toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' });
-  const captionText = [config.caption.trim(), config.showDate ? dateStr : ''].filter(Boolean).join(' · ');
-  const captionH = captionText ? CAPTION_H : 0;
+function formatDate(date) {
+  if (dateStyle === 'numeric') {
+    const yy = String(date.getFullYear()).slice(-2);
+    return `${date.getMonth() + 1}.${date.getDate()}.${yy}`;
+  }
+  return date.toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' });
+}
+
+async function buildStrip() {
+  const dateStr = formatDate(new Date());
+  const captionLine = config.caption.trim();
+  const dateLine = config.showDate ? dateStr : '';
+
+  // Unna must actually be loaded before ctx.font can use it, or the canvas
+  // silently falls back to the default serif font.
+  await Promise.all([
+    document.fonts.load(captionFont(CAPTION_FONT_SIZE)),
+    document.fonts.load(captionFont(DATE_FONT_SIZE))
+  ]);
+
+  let captionH = 0;
+  if (captionLine) captionH += CAPTION_FONT_SIZE;
+  if (captionLine && dateLine) captionH += CAPTION_LINE_GAP;
+  if (dateLine) captionH += DATE_FONT_SIZE;
+  if (captionH) captionH += CAPTION_PAD * 2;
 
   const stripW = FRAME_W + PADDING * 2;
   const photosH = shots.length * FRAME_H + (shots.length - 1) * GAP;
@@ -600,7 +702,9 @@ function buildStrip() {
   stripCanvas.height = stripH;
   const ctx = stripCanvas.getContext('2d');
 
-  ctx.fillStyle = paperColor;
+  // The strip is always plain white/dark ink — kept the same regardless of
+  // site theme so a printed strip looks like a real photobooth strip.
+  ctx.fillStyle = STRIP_PAPER;
   ctx.fillRect(0, 0, stripW, stripH);
 
   shots.forEach((shotCanvas, i) => {
@@ -611,13 +715,34 @@ function buildStrip() {
     ctx.strokeRect(PADDING, y, FRAME_W, FRAME_H);
   });
 
-  if (captionText) {
-    ctx.fillStyle = inkColor;
+  if (captionH) {
+    ctx.fillStyle = STRIP_INK;
     ctx.textAlign = 'center';
-    ctx.textBaseline = 'middle';
-    ctx.font = "28px 'Brush Script MT', cursive, Georgia, serif";
-    ctx.fillText(captionText, stripW / 2, PADDING + photosH + captionH / 2);
+    const bandTop = PADDING + photosH;
+    let y = bandTop + CAPTION_PAD;
+
+    if (captionLine) {
+      ctx.font = captionFont(CAPTION_FONT_SIZE);
+      ctx.textBaseline = 'top';
+      ctx.fillText(captionLine, stripW / 2, y);
+      y += CAPTION_FONT_SIZE + CAPTION_LINE_GAP;
+    }
+    if (dateLine) {
+      ctx.font = captionFont(DATE_FONT_SIZE);
+      ctx.textBaseline = 'top';
+      ctx.fillText(dateLine, stripW / 2, y);
+    }
   }
+
+  // Cut guidelines: a light dashed border at the true edge of the exported
+  // image so it can be trimmed to size after printing, like a real strip.
+  ctx.save();
+  ctx.strokeStyle = '#d0d0d0';
+  ctx.lineWidth = 1;
+  ctx.setLineDash([6, 5]);
+  const inset = 5;
+  ctx.strokeRect(inset, inset, stripW - inset * 2, stripH - inset * 2);
+  ctx.restore();
 }
 
 async function runSession() {
@@ -638,7 +763,7 @@ async function runSession() {
     await sleep(500);
   }
 
-  buildStrip();
+  await buildStrip();
   stripWrap.style.display = 'flex';
   startBtn.disabled = false;
   startBtn.style.display = 'inline-block';
@@ -676,19 +801,32 @@ shareBtn.addEventListener('click', () => {
 });
 
 // Live-update an already-captured strip if the customize fields change afterward,
-// so Save/Share/Print always reflect the current theme/caption/date settings.
+// so Save/Share/Print always reflect the current caption/style/date settings.
 function onConfigFieldChange() {
   config = {
-    theme: themeSelect.value,
+    siteTheme: siteThemeSelect.value,
     caption: captionInput.value,
+    bold: boldInput.checked,
+    italic: italicInput.checked,
     showDate: showDateInput.checked
   };
-  applyTheme(config.theme);
+  applySiteTheme(config.siteTheme);
+  dateStyleField.style.display = config.showDate ? '' : 'none';
   if (shots.length) buildStrip();
 }
-themeSelect.addEventListener('change', onConfigFieldChange);
+siteThemeSelect.addEventListener('change', onConfigFieldChange);
 captionInput.addEventListener('input', onConfigFieldChange);
+boldInput.addEventListener('change', onConfigFieldChange);
+italicInput.addEventListener('change', onConfigFieldChange);
 showDateInput.addEventListener('change', onConfigFieldChange);
+
+// Date format is a free choice for whoever's using the page (creator or a
+// shared-link recipient) — unlike caption/theme/style, it's not locked by a
+// shared template.
+dateStyleSelect.addEventListener('change', () => {
+  dateStyle = dateStyleSelect.value;
+  if (shots.length) buildStrip();
+});
 
 // qrcodejs (vendored in qrcode.min.js) uses a fixed QR "type" (matrix size) per
 // call and throws if the payload doesn't fit — grow the type until it fits

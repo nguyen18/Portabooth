@@ -10,8 +10,9 @@ A browser-based photobooth ("Snapstrip"). User taps a button, the browser's webc
 
 ## Current state
 
-- `photobooth.html` — the entire application: markup, CSS, and JS in one file (~530 lines).
+- `photobooth.html` — the entire application: markup, CSS, and JS in one file (~590 lines).
 - `qrcode.min.js` — vendored third-party QR code generator (davidshimjs/qrcodejs, MIT), loaded via a local `<script src>` tag. See "Custom template sharing" below for why it's vendored instead of a CDN `<script>` tag.
+- `fonts/Unna-{Regular,Bold,Italic,BoldItalic}.ttf` — vendored Unna typeface (SIL Open Font License, `fonts/Unna-OFL.txt`), used for the caption/date drawn onto the exported strip. Vendored for the same reason as the QR library: no third-party dependency at runtime.
 - `README.md` — one-line project blurb.
 - No package.json, no framework, no bundler. Opening the HTML file in a browser (or serving it statically) is the whole deploy story.
 
@@ -21,14 +22,18 @@ Deliberate choice, not a placeholder: [conversation with the project owner](.) c
 
 ### Layout (HTML)
 - `#templateNote` — one-line "Using a shared custom template" indicator, shown only when the page was opened via a link/QR that encodes a saved template (see below).
-- `.customize` (`<details>`) — the template editor: frame-theme `<select>`, caption `<input>`, show-date checkbox, and the "Get shareable link" flow (link `<input readonly>` + copy button + `#qrOutput` QR code container). Collapsed by default so the primary shoot flow stays uncluttered.
+- `.customize` (`<details>`) — the template editor: site-theme `<select>`, caption `<input>`, Bold/Italic style checkboxes, show-date checkbox, and the "Get shareable link" flow (link `<input readonly>` + copy button + `#qrOutput` QR code container). Collapsed by default so the primary shoot flow stays uncluttered.
 - `.stage` — the live camera view: `<video>` element (mirrored front camera feed), flash overlay, countdown overlay, shot counter (`0 / 4` etc.), and the Start/Retake buttons.
 - `#permHint` — camera-permission helper text shown before capture / on `getUserMedia` failure.
-- `.strip-wrap` — the result screen: rendered photo strip (`<canvas id="stripCanvas">`) plus Save / Share / Print / New-strip buttons. Hidden until a session completes. The caption/date text is drawn directly onto this canvas (not a separate DOM overlay) so it's included in Save/Share/Print output — see "Custom template sharing" below.
+- `.strip-wrap` — the result screen: rendered photo strip (`<canvas id="stripCanvas">`), a `#dateStyleField` date-format `<select>` (only visible once a strip exists and `config.showDate` is true), and the Save / Share / Print / New-strip buttons. Hidden until a session completes. The caption/date text and the cut-guide dashes are drawn directly onto the canvas (not a separate DOM overlay) so they're included in Save/Share/Print output — see "Custom template sharing" below.
 - `#workCanvas` — declared but currently **unused / dead** (see Known issues below).
 
 ### Styling
-Single `<style>` block, CSS custom properties for the "velvet curtain photobooth" theme (`--curtain`, `--bulb`, `--paper`, `--brass`, etc.), defined on `:root` and overridden per theme via `:root[data-theme="noir|blush|mint"]`. Includes a `@media print` rule so "Print" only prints the strip, not the whole page chrome.
+Single `<style>` block. Two independent color systems, which was a point of real confusion during development and is worth keeping straight:
+- **Site theme** — CSS custom properties for the "velvet curtain photobooth" *page chrome* (`--curtain`, `--bulb`, `--brass`, etc.), defined on `:root` and overridden via `:root[data-theme="noir|blush|mint"]`. Controlled by the "Site theme" select. Does **not** affect the exported strip.
+- **Strip appearance** — always plain white paper with dark ink (`STRIP_PAPER`/`STRIP_INK` constants in JS), regardless of site theme, so a printed strip always looks like a real photobooth strip. `.strip-frame` background is hardcoded `#ffffff` for the same reason.
+
+Four `@font-face` declarations load the vendored Unna weights/styles (regular/bold/italic/bold-italic) for the canvas-drawn caption. Includes a `@media print` rule so "Print" only prints the strip, not the whole page chrome.
 
 ### JS (single `<script>` block)
 No modules, no classes — a flat script with DOM refs at the top and a handful of functions:
@@ -39,31 +44,35 @@ No modules, no classes — a flat script with DOM refs at the top and a handful 
 | `runCountdown(seconds)` | Async, updates `#countdown` overlay text once per second via `sleep()`. |
 | `doFlash()` | CSS-opacity flash effect on `.flash` overlay, triggered right before each capture. |
 | `captureFrame()` | Grabs one frame from `<video>` onto an off-DOM `<canvas>`, cover-fit-cropped to a fixed 500×375 (4:3) cell, mirrored to match the on-screen preview. Returns the canvas. |
-| `buildStrip()` | Stacks the captured canvases vertically (with padding/gaps) onto the visible `#stripCanvas`, reading `--paper`/`--ink` from the active theme, then draws the caption/date text onto the canvas itself. |
-| `runSession()` | Orchestrates one full run: resets `shots`, loops 4× doing countdown → flash → capture, then calls `buildStrip()` and reveals the result screen. |
+| `buildStrip()` | Async. Stacks the captured canvases vertically (with padding/gaps) onto `#stripCanvas` against a fixed white background, awaits the Unna variant it needs via `document.fonts.load(...)`, draws the caption line and date line (two separate lines, each vertically stacked and centered) in `STRIP_INK`, then draws the dashed cut-guide border around the full canvas edge. |
+| `captionFont(size)` | Builds a canvas `font` shorthand string (`italic bold 30px Unna, Georgia, serif`) from the current `config.bold`/`config.italic`, used both to draw text and to `document.fonts.load()` the right variant. |
+| `runSession()` | Orchestrates one full run: resets `shots`, loops 4× doing countdown → flash → capture, then `await`s `buildStrip()` and reveals the result screen. |
 | Save/Share/Print handlers | `saveBtn` → `canvas.toDataURL('image/png')` download link. `shareBtn` → `navigator.share` with a `File` (only shown if `navigator.canShare` exists). `printBtn` → `window.print()`. `againBtn` → hides the result screen to shoot again. |
-| `applyTheme(theme)` / `applyConfig(cfg)` | Sets/removes `data-theme` on `<html>` and syncs the customize form fields to a `config` object. |
-| `encodeConfig(cfg)` / `decodeConfig(str)` / `readConfigFromURL()` | Pack/unpack `{theme, caption, showDate}` to/from a base64-JSON `#c=` URL hash. `decodeConfig` validates `theme` against the known list and clamps `caption` length — untrusted input, since it comes from a URL someone else generated. |
-| `onConfigFieldChange()` | Fired on customize-field input/change; updates `config`, re-applies the theme, and re-runs `buildStrip()` live if a strip was already captured. |
+| `applySiteTheme(siteTheme)` / `applyConfig(cfg)` | Sets/removes `data-theme` on `<html>` (page chrome only) and syncs the customize form fields to a `config` object. |
+| `encodeConfig(cfg)` / `decodeConfig(str)` / `readConfigFromURL()` | Pack/unpack `{siteTheme, caption, bold, italic, showDate}` to/from a base64-JSON `#c=` URL hash. `decodeConfig` validates `siteTheme` against the known list and clamps `caption` length — untrusted input, since it comes from a URL someone else generated. |
+| `onConfigFieldChange()` | Fired on customize-field input/change; updates `config`, re-applies the site theme, updates `#dateStyleField` visibility, and re-runs `buildStrip()` live if a strip was already captured. |
 | `renderQRCode(container, text)` | Renders a QR code via the vendored `QRCode` global, retrying increasing QR "type" (matrix size) until the payload fits — the library doesn't auto-size and throws on overflow otherwise. |
+| `formatDate(date)` | Formats a `Date` per the current `dateStyle` (`'long'` → "Sep 14, 2026", `'numeric'` → "9.14.26"). |
 
-**State** is minimal and intentionally not framework-managed: `stream` (MediaStream), `shots` (array of captured `<canvas>` elements), and `config` (`{theme, caption, showDate}`), all module-level `let` variables closed over by the functions above.
+**State** is minimal and intentionally not framework-managed: `stream` (MediaStream), `shots` (array of captured `<canvas>` elements), `config` (`{siteTheme, caption, bold, italic, showDate}` — the shared/lockable template), and `dateStyle` (`'long' | 'numeric'`, **not** part of `config`/the shared URL — see below), all module-level `let` variables closed over by the functions above.
 
-**Constants** controlling capture geometry: `SHOT_COUNT = 4`, `FRAME_W/FRAME_H = 500×375` (4:3), `PADDING = 20`, `GAP = 14`, `CAPTION_H = 46`.
+**Constants** controlling capture geometry: `SHOT_COUNT = 4`, `FRAME_W/FRAME_H = 500×375` (4:3), `PADDING = 20`, `GAP = 14`. Caption layout: `CAPTION_FONT_SIZE = 30`, `DATE_FONT_SIZE = 20`, `CAPTION_LINE_GAP = 10`, `CAPTION_PAD = 18` (the caption band height is computed from these based on which of caption/date are actually present, not a fixed constant).
 
 ### Custom template sharing
 
-Feature: a user can set a frame theme, caption, and date visibility, then get a link/QR code that reproduces that exact template for whoever opens it — no login, no per-user frame upload.
+Feature: a user can set a site theme, caption (with bold/italic styling), and date visibility, then get a link/QR code that reproduces that exact template for whoever opens it — no login, no per-user frame upload.
 
-Design choice (discussed with the project owner before building): **entirely static, config packed into the URL** rather than adding any backend/storage. Concretely: `{theme, caption, showDate}` → `JSON.stringify` → UTF-8-safe base64 → `#c=<blob>` URL hash → QR code generated client-side from that URL via the vendored `qrcode.min.js`. Opening the link re-decodes the hash and calls `applyConfig()` before the user does anything else.
+Design choice (discussed with the project owner before building): **entirely static, config packed into the URL** rather than adding any backend/storage. Concretely: `{siteTheme, caption, bold, italic, showDate}` → `JSON.stringify` → UTF-8-safe base64 → `#c=<blob>` URL hash → QR code generated client-side from that URL via the vendored `qrcode.min.js`. Opening the link re-decodes the hash and calls `applyConfig()` before the user does anything else.
 
 This was chosen over two heavier alternatives (still on the table if requirements grow):
 - **Full accounts** — login + per-user frame management. Rejected as overkill for "share one template with someone."
 - **Minimal serverless storage** — real image upload, stored server-side under a short ID. Would be needed if arbitrary custom frame *graphics* (not just theme/caption) become a requirement, since an uploaded image can't reasonably live inside a URL/QR code. This is the natural next step if that's ever wanted — see the conversation history around 2026-09-14 for the fuller tradeoff writeup.
 
-Because of this choice, current "frames" are limited to the built-in `THEMES` list (`classic`, `noir`, `blush`, `mint`) plus free-text caption and a date toggle — not arbitrary uploaded graphics. Keep the encoded payload small (short strings/enums only) so the QR code stays scannable.
+Because of this choice, current "frames" are limited to the built-in `SITE_THEMES` list (`classic`, `noir`, `blush`, `mint`) plus free-text caption/style and a date toggle — not arbitrary uploaded graphics. Keep the encoded payload small (short strings/booleans only) so the QR code stays scannable.
 
 `qrcode.min.js` is vendored (copied into the repo) rather than loaded from a CDN `<script src>` specifically to preserve the app's "everything runs on your device, no network dependency beyond the camera" property — a CDN script would make template rendering depend on a third party being up.
+
+**Recipient lockdown.** When the page is opened via a shared link (i.e. `readConfigFromURL()` returns a config), `#customize` is hidden entirely (`customizeDetails.style.display = 'none'`) — the recipient gets the creator's theme/caption/style/date-visibility exactly as set, with no UI path to change any of it, including the caption. The one exception is **date format** (`'long'` vs `'numeric'`, via `#dateStyleField`/`dateStyle`): this is deliberately kept *outside* `config`/the shared URL, so it's a free choice for whoever is using the page — creator or recipient — available once a strip has been captured. If a future request asks to lock the date format too, or to let recipients edit more than that, the config shape and the `customizeDetails.style.display = 'none'` line above are the places to revisit.
 
 ### Mobile-specific details already handled
 - `playsinline muted autoplay` on `<video>` — required for iOS Safari to render the camera feed inline instead of forcing fullscreen.
