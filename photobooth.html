@@ -767,7 +767,7 @@ function drawCaptionLines(ctx, width, top, layout) {
 
   if (layout.captionLine) {
     ctx.font = captionFont(CAPTION_FONT_SIZE);
-    ctx.fillText(layout.captionLine, width / 2, y);
+    ctx.fillText(layout.captionLine, width / 2, y + 2);
     y += CAPTION_FONT_SIZE + CAPTION_LINE_GAP;
   }
   if (layout.dateLine) {
