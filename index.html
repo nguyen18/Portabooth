@@ -480,19 +480,26 @@
       align-items: center;
       justify-content: center;
     }
-    /* Sized slightly smaller than the full 4x6" page (not a literal 2in x
-       6in), on purpose: many mobile print pipelines (iOS AirPrint, Android
-       print services) enforce their own small unprintable margin even when
-       @page says margin: 0 — desktop's print-to-PDF/driver path is more
-       literal about honoring it. With zero built-in buffer, that margin had
-       nowhere to go except pushing the very bottom of the image (the
-       caption/date, since they're the last thing drawn) onto a forced
-       second page. This buffer costs a barely-noticeable ~3% size
-       reduction and fixes that regardless of what margin a given mobile
-       print service imposes. */
+    /* Sized smaller than the full 4x6" page (not a literal 2in x 6in), on
+       purpose: many mobile print pipelines (iOS AirPrint, Android print
+       services) enforce their own unprintable margin even when @page says
+       margin: 0 — desktop's print-to-PDF/driver path is more literal about
+       honoring it. This margin comes from the OS/print-service pipeline,
+       NOT the printer itself — e.g. the Liene M100 (a printer this was
+       reported against) only needs ~1mm of its own bleed margin for
+       borderless printing, far less than the buffer below, confirming the
+       cutoff isn't about matching a specific printer's spec. That pipeline
+       margin isn't published anywhere and can't be queried from the page,
+       so this is tuned empirically with headroom rather than calculated
+       exactly: first pass (2in x 6in, no margin) still got cut off onto a
+       second page; second pass (1.9in x 5.8in, ~3% smaller) still showed a
+       little cutoff in print preview. This third pass roughly doubles that
+       buffer. If it's still not enough on some device, increase further —
+       there's no way to derive the exact right number without testing on
+       that specific phone/printer/OS combination. */
     .print-sheet img {
-      width: 1.9in;
-      height: 5.8in;
+      width: 1.8in;
+      height: 5.6in;
       object-fit: contain;
     }
     /* body's own padding/background still apply otherwise (it isn't hidden,
