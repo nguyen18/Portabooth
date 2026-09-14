@@ -42,7 +42,8 @@ No modules, no classes — a flat script with DOM refs at the top and a handful 
 |---|---|
 | `initCamera()` | Requests `getUserMedia` (front camera, ideal 1280×960), binds stream to `<video>`. Shows `permHint` text on failure. Runs immediately on page load. |
 | `runCountdown(seconds)` | Async, updates `#countdown` overlay text once per second via `sleep()`. |
-| `doFlash()` | CSS-opacity flash effect on `.flash` overlay, triggered right before each capture. |
+| `doFlash()` | CSS-opacity flash effect on `.flash` overlay plus `playShutterSound()`, triggered right before each capture. |
+| `playShutterSound()` / `getAudioCtx()` | Synthesizes a camera-shutter click via Web Audio (a short high-passed noise burst with a fast exponential decay) — no external audio asset vendored or licensed. The `AudioContext` is created/`resume()`d synchronously at the top of `runSession()` (a real user gesture, the Start-button click), since browsers block audio first started later inside an async chain. |
 | `captureFrame()` | Grabs one frame from `<video>` onto an off-DOM `<canvas>`, cover-fit-cropped to a fixed 500×375 (4:3) cell, mirrored to match the on-screen preview. Returns the canvas. |
 | `buildStrip()` | Async. Stacks the captured canvases vertically (with padding/gaps) onto `#stripCanvas` against a fixed white background, then calls `drawCaptionLines()` for the caption band and draws the dashed cut-guide border around the full canvas edge. |
 | `renderCaptionPreview()` | Async. Draws the same caption/date band (via `computeCaptionLayout()` + `drawCaptionLines()`) onto the small `#captionPreview` canvas in the customize panel, at the same pixel width as the real strip so it's an exact preview, not an approximation. Called from `applyConfig()` and `onConfigFieldChange()` so it updates live as the user types/toggles, before any photo is taken. |
@@ -59,7 +60,7 @@ No modules, no classes — a flat script with DOM refs at the top and a handful 
 
 **State** is minimal and intentionally not framework-managed: `stream` (MediaStream), `shots` (array of captured `<canvas>` elements), `config` (`{siteTheme, caption, bold, italic, showDate}` — the shared/lockable template), and `dateStyle` (`'long' | 'numeric'`, **not** part of `config`/the shared URL — see below), all module-level `let` variables closed over by the functions above.
 
-**Constants** controlling capture geometry: `SHOT_COUNT = 4`, `FRAME_W/FRAME_H = 500×375` (4:3), `PADDING = 20`, `GAP = 14`. Caption layout: `CAPTION_FONT_SIZE = 30`, `DATE_FONT_SIZE = 20`, `CAPTION_LINE_GAP = 10`, `CAPTION_PAD = 18` (the caption band height is computed from these based on which of caption/date are actually present, not a fixed constant).
+**Constants** controlling capture geometry: `SHOT_COUNT = 4`, `FRAME_W/FRAME_H = 500×375` (4:3), `PADDING = 30` (outer margin around the photos — the "cut to size" white border), `GAP = 14` (between photos). Caption layout: `CAPTION_FONT_SIZE = 30`, `DATE_FONT_SIZE = 20`, `CAPTION_LINE_GAP = 10`, `CAPTION_PAD = 18` (the caption band height is computed from these based on which of caption/date are actually present, not a fixed constant).
 
 ### Custom template sharing
 

@@ -543,7 +543,7 @@ const dateStyleSelect = document.getElementById('dateStyleSelect');
 const SHOT_COUNT = 4;
 const FRAME_W = 500;   // px per photo cell at capture resolution
 const FRAME_H = 375;   // 4:3
-const PADDING = 20;
+const PADDING = 30;
 const GAP = 14;
 
 // The strip itself always prints on plain white paper with dark ink, regardless
@@ -655,7 +655,44 @@ async function runCountdown(seconds) {
   countdownEl.style.display = 'none';
 }
 
+// Camera shutter click, synthesized via Web Audio so no external audio file
+// needs to be vendored/licensed. A short burst of high-passed noise with a
+// fast decay reads as a mechanical "click" rather than a synth blip.
+let audioCtx = null;
+function getAudioCtx() {
+  if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+  return audioCtx;
+}
+
+function playShutterSound() {
+  const ctx = getAudioCtx();
+  const duration = 0.09;
+  const buffer = ctx.createBuffer(1, ctx.sampleRate * duration, ctx.sampleRate);
+  const data = buffer.getChannelData(0);
+  for (let i = 0; i < data.length; i++) {
+    data[i] = (Math.random() * 2 - 1) * Math.pow(1 - i / data.length, 3);
+  }
+
+  const noise = ctx.createBufferSource();
+  noise.buffer = buffer;
+
+  const filter = ctx.createBiquadFilter();
+  filter.type = 'highpass';
+  filter.frequency.value = 2200;
+
+  const gain = ctx.createGain();
+  gain.gain.setValueAtTime(0.7, ctx.currentTime);
+  gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + duration);
+
+  noise.connect(filter);
+  filter.connect(gain);
+  gain.connect(ctx.destination);
+  noise.start();
+  noise.stop(ctx.currentTime + duration);
+}
+
 function doFlash() {
+  playShutterSound();
   flashEl.style.transition = 'none';
   flashEl.style.opacity = '0.9';
   requestAnimationFrame(() => {
@@ -793,6 +830,12 @@ async function buildStrip() {
 }
 
 async function runSession() {
+  // Create/unlock the AudioContext synchronously on this click (a genuine user
+  // gesture) — browsers won't let audio play if it's first started later, deep
+  // inside the async countdown/capture loop below.
+  const ctx = getAudioCtx();
+  if (ctx.state === 'suspended') ctx.resume();
+
   shots = [];
   startBtn.disabled = true;
   startBtn.style.display = 'none';
