@@ -1079,10 +1079,10 @@ async function runSession() {
     shotCounter.textContent = `${i} / ${SHOT_COUNT}`;
     await runCountdown(5);
     doFlash();
-    await sleep(120);
+    await sleep(300);
     shots.push(captureFrame());
     shotCounter.textContent = `${i + 1} / ${SHOT_COUNT}`;
-    await sleep(500);
+    await sleep(834);
   }
 
   await buildStrip();
