@@ -480,9 +480,19 @@
       align-items: center;
       justify-content: center;
     }
+    /* Sized slightly smaller than the full 4x6" page (not a literal 2in x
+       6in), on purpose: many mobile print pipelines (iOS AirPrint, Android
+       print services) enforce their own small unprintable margin even when
+       @page says margin: 0 — desktop's print-to-PDF/driver path is more
+       literal about honoring it. With zero built-in buffer, that margin had
+       nowhere to go except pushing the very bottom of the image (the
+       caption/date, since they're the last thing drawn) onto a forced
+       second page. This buffer costs a barely-noticeable ~3% size
+       reduction and fixes that regardless of what margin a given mobile
+       print service imposes. */
     .print-sheet img {
-      width: 2in;
-      height: 6in;
+      width: 1.9in;
+      height: 5.8in;
       object-fit: contain;
     }
     /* body's own padding/background still apply otherwise (it isn't hidden,
