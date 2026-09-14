@@ -426,15 +426,34 @@
     z-index: 1;
   }
 
+  /* Print: two copies of the strip side by side on a 4x6" photo sheet —
+     the standard way a photobooth strip gets printed, cut down the middle. */
+  @page {
+    size: 4in 6in;
+    margin: 0;
+  }
+
+  .print-sheet {
+    display: none;
+  }
+
   @media print {
     body * { visibility: hidden; }
-    .strip-frame, .strip-frame * { visibility: visible; }
-    .strip-frame {
+    .print-sheet, .print-sheet * { visibility: visible; }
+    .print-sheet {
+      display: flex;
       position: fixed;
       top: 0;
       left: 0;
-      box-shadow: none;
-      border: none;
+      width: 4in;
+      height: 6in;
+      align-items: center;
+      justify-content: center;
+    }
+    .print-sheet img {
+      width: 2in;
+      height: 6in;
+      object-fit: contain;
     }
   }
 </style>
@@ -534,6 +553,7 @@
   </div>
 
   <canvas id="workCanvas" style="display:none;"></canvas>
+  <div class="print-sheet" id="printSheet"></div>
 
 <script src="qrcode.min.js"></script>
 <script>
@@ -552,6 +572,7 @@ const permHint = document.getElementById('permHint');
 const saveBtn = document.getElementById('saveBtn');
 const shareBtn = document.getElementById('shareBtn');
 const printBtn = document.getElementById('printBtn');
+const printSheet = document.getElementById('printSheet');
 const againBtn = document.getElementById('againBtn');
 
 const siteThemeSelect = document.getElementById('siteThemeSelect');
@@ -966,6 +987,15 @@ saveBtn.addEventListener('click', () => {
 });
 
 printBtn.addEventListener('click', () => {
+  // Build two copies of the strip side by side for a 4x6" photo sheet —
+  // rebuilt fresh each print so it always reflects the current strip.
+  const dataUrl = stripCanvas.toDataURL('image/png');
+  printSheet.innerHTML = '';
+  for (let i = 0; i < 2; i++) {
+    const img = document.createElement('img');
+    img.src = dataUrl;
+    printSheet.appendChild(img);
+  }
   window.print();
 });
 
