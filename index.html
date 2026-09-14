@@ -1075,13 +1075,13 @@ async function runSession() {
   stripWrap.style.display = 'none';
   stage.style.display = 'block';
 
-  for (let i = 1; i < SHOT_COUNT; i++) {
+  for (let i = 1; i <= SHOT_COUNT; i++) {
     shotCounter.textContent = `${i} / ${SHOT_COUNT}`;
     await runCountdown(5);
     doFlash();
     await sleep(300);
     shots.push(captureFrame());
-    shotCounter.textContent = `${i + 1} / ${SHOT_COUNT}`;
+    shotCounter.textContent = `${i} / ${SHOT_COUNT}`;
     await sleep(834);
   }
 
