@@ -695,10 +695,13 @@ function doFlash() {
   playShutterSound();
   flashEl.style.transition = 'none';
   flashEl.style.opacity = '0.9';
-  requestAnimationFrame(() => {
-    flashEl.style.transition = 'opacity 350ms ease';
-    flashEl.style.opacity = '0';
-  });
+  // Force the browser to commit the "flash on" state above before queuing the
+  // fade-out below — without this, a rAF-only restart can (inconsistently,
+  // depending on paint timing) collapse both style changes into a single
+  // paint and skip the flash frame entirely.
+  void flashEl.offsetHeight;
+  flashEl.style.transition = 'opacity 350ms ease';
+  flashEl.style.opacity = '0';
 }
 
 function captureFrame() {
@@ -767,7 +770,7 @@ function drawCaptionLines(ctx, width, top, layout) {
 
   if (layout.captionLine) {
     ctx.font = captionFont(CAPTION_FONT_SIZE);
-    ctx.fillText(layout.captionLine, width / 2, y + 2);
+    ctx.fillText(layout.captionLine, width / 2, y + 4);
     y += CAPTION_FONT_SIZE + CAPTION_LINE_GAP;
   }
   if (layout.dateLine) {
