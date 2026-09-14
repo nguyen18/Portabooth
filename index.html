@@ -1223,13 +1223,16 @@ printBtn.addEventListener('click', async () => {
   // native PDF viewer has rendered the file, trigger its print flow
   // directly -- this prints the PDF document itself (no injected webpage
   // header/footer, since nothing here is "printing a webpage").
+  // No artificial delay here on purpose: on desktop this is a well-
+  // established pattern that generally works fine calling print()
+  // immediately on load. On mobile (iOS Safari especially), gesture-
+  // requiring APIs like print() are tied to a "user activation" that can
+  // expire quickly and may not survive async work at all -- waiting
+  // *longer* after the original click only reduces the odds it still
+  // counts, so print() is called as soon as possible rather than after a
+  // deliberate pause.
   printWindow.addEventListener('load', () => {
-    // The window's load event fires once the PDF bytes have arrived, but
-    // the native PDF viewer plugin can take a moment longer to actually
-    // finish rendering — calling print() the instant load fires has been
-    // known to occasionally race ahead of that in some browsers. A short
-    // delay is a common, pragmatic mitigation for this exact scenario.
-    setTimeout(() => printWindow.print(), 300);
+    printWindow.print();
   });
   printWindow.location.href = blobUrl;
 });
