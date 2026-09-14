@@ -4,11 +4,6 @@ A browser-based photobooth — four frames, one strip, all yours. No app to inst
 
 **Live: [portabooth.studio](https://portabooth.studio)**
 
-<p float="left">
-  <img src="screenshots/main.png" alt="Portabooth customize screen" width="45%">
-  <img src="screenshots/result.png" alt="Finished photo strip with sepia filter" width="45%">
-</p>
-
 ## Features
 
 - Countdown-timed 4-shot capture, with a camera flash and shutter sound
