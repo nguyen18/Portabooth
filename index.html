@@ -1077,7 +1077,7 @@ async function runSession() {
 
   for (let i = 0; i < SHOT_COUNT; i++) {
     shotCounter.textContent = `${i} / ${SHOT_COUNT}`;
-    await runCountdown(3);
+    await runCountdown(5);
     doFlash();
     await sleep(120);
     shots.push(captureFrame());
