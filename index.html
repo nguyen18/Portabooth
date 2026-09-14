@@ -522,6 +522,7 @@
       <select id="dateStyleSelect">
         <option value="long">Sep 14, 2026</option>
         <option value="numeric">9.14.26</option>
+        <option value="off">No date</option>
       </select>
     </div>
     <div class="save-row">
@@ -674,11 +675,15 @@ if (shared) {
   // are locked to whatever the creator set. Only the date format (not the
   // caption itself) stays adjustable, via #dateStyleField below.
   customizeDetails.style.display = 'none';
-  musicToggle.style.display = 'inline-block';
-  bgMusic.play().catch(() => {});
 } else {
   applyConfig(config);
 }
+
+// Background music + its on/off toggle are available on every page, not just
+// shared links — see updateMusicToggleLabel() above for how the toggle's
+// label stays accurate even if this initial autoplay attempt is blocked.
+musicToggle.style.display = 'inline-block';
+bgMusic.play().catch(() => {});
 
 async function startCamera(mode) {
   const requested = mode;
@@ -798,7 +803,7 @@ function formatDate(date) {
 // live customize-panel preview) so the two can never drift out of sync.
 function computeCaptionLayout() {
   const captionLine = config.caption.trim();
-  const dateLine = config.showDate ? formatDate(new Date()) : '';
+  const dateLine = (config.showDate && dateStyle !== 'off') ? formatDate(new Date()) : '';
   let captionH = 0;
   if (captionLine) captionH += CAPTION_FONT_SIZE;
   if (captionLine && dateLine) captionH += CAPTION_LINE_GAP;
@@ -825,7 +830,9 @@ function drawCaptionLines(ctx, width, top, layout) {
 
   if (layout.captionLine) {
     ctx.font = captionFont(CAPTION_FONT_SIZE);
-    ctx.fillText(layout.captionLine, width / 2, y + 4);
+    // Sit 2px lower when there's no date line beneath it to keep balanced.
+    const captionYOffset = layout.dateLine ? 4 : 6;
+    ctx.fillText(layout.captionLine, width / 2, y + captionYOffset);
     y += CAPTION_FONT_SIZE + CAPTION_LINE_GAP;
   }
   if (layout.dateLine) {
