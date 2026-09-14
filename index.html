@@ -497,8 +497,13 @@
        buffer. If it's still not enough on some device, increase further —
        there's no way to derive the exact right number without testing on
        that specific phone/printer/OS combination. */
+    /* One combined image now (both strips drawn side by side onto a single
+       canvas in buildPrintCanvas() — see there for why: sharing one outer
+       border and one dashed dividing line instead of each strip carrying
+       its own full border), so this is double the single-strip width from
+       before, same height and margin proportions. */
     .print-sheet img {
-      width: 1.8in;
+      width: 3.6in;
       height: 5.6in;
       object-fit: contain;
     }
@@ -1014,7 +1019,7 @@ async function loadCaptionFonts() {
   ]);
 }
 
-function drawCaptionLines(ctx, width, top, layout) {
+function drawCaptionLines(ctx, centerX, top, layout) {
   if (!layout.captionH) return;
   ctx.fillStyle = STRIP_INK;
   ctx.textAlign = 'center';
@@ -1025,7 +1030,7 @@ function drawCaptionLines(ctx, width, top, layout) {
     // rather than a hand-computed offset — robust regardless of font metrics.
     ctx.textBaseline = 'middle';
     ctx.font = captionFont(CAPTION_FONT_SIZE);
-    ctx.fillText(layout.captionLine, width / 2, top + layout.captionH / 2);
+    ctx.fillText(layout.captionLine, centerX, top + layout.captionH / 2);
     return;
   }
 
@@ -1035,12 +1040,12 @@ function drawCaptionLines(ctx, width, top, layout) {
     ctx.font = captionFont(CAPTION_FONT_SIZE);
     // Small nudge down so the caption sits visually balanced above the date
     // line beneath it — see ARCHITECTURE.md "Caption vertical offset".
-    ctx.fillText(layout.captionLine, width / 2, y + 4);
+    ctx.fillText(layout.captionLine, centerX, y + 4);
     y += CAPTION_FONT_SIZE + CAPTION_LINE_GAP;
   }
   if (layout.dateLine) {
     ctx.font = captionFont(DATE_FONT_SIZE);
-    ctx.fillText(layout.dateLine, width / 2, y);
+    ctx.fillText(layout.dateLine, centerX, y);
   }
 }
 
@@ -1057,35 +1062,50 @@ async function renderCaptionPreview() {
   const ctx = captionPreview.getContext('2d');
   ctx.fillStyle = STRIP_PAPER;
   ctx.fillRect(0, 0, width, height);
-  drawCaptionLines(ctx, width, 0, layout);
+  drawCaptionLines(ctx, width / 2, 0, layout);
+}
+
+// Draws one strip's paper background, photos, and caption at the given x
+// offset within ctx — no border. Shared by buildStrip() (a single strip,
+// which draws its own full border after calling this) and
+// buildPrintCanvas() (two strips side by side sharing one outer border and
+// one dividing line, rather than each strip carrying its own).
+function drawStripContent(ctx, offsetX, stripW, photosH, layout) {
+  const stripH = PADDING * 2 + photosH + layout.captionH;
+  ctx.fillStyle = STRIP_PAPER;
+  ctx.fillRect(offsetX, 0, stripW, stripH);
+
+  shots.forEach((shotCanvas, i) => {
+    const y = PADDING + i * (FRAME_H + GAP);
+    const x = offsetX + PADDING;
+    ctx.drawImage(shotCanvas, x, y, FRAME_W, FRAME_H);
+    applyPixelFilterMatrix(ctx, x, y, FRAME_W, FRAME_H, FILTER_MATRICES[photoFilter]);
+    ctx.strokeStyle = 'rgba(0,0,0,0.15)';
+    ctx.lineWidth = 1;
+    ctx.strokeRect(x, y, FRAME_W, FRAME_H);
+  });
+
+  drawCaptionLines(ctx, offsetX + stripW / 2, PADDING + photosH, layout);
+}
+
+function stripDimensions() {
+  const stripW = FRAME_W + PADDING * 2;
+  const photosH = shots.length * FRAME_H + (shots.length - 1) * GAP;
+  const layout = computeCaptionLayout();
+  const stripH = PADDING * 2 + photosH + layout.captionH;
+  return { stripW, photosH, stripH, layout };
 }
 
 async function buildStrip() {
   await loadCaptionFonts();
-  const layout = computeCaptionLayout();
-
-  const stripW = FRAME_W + PADDING * 2;
-  const photosH = shots.length * FRAME_H + (shots.length - 1) * GAP;
-  const stripH = PADDING * 2 + photosH + layout.captionH;
+  const { stripW, photosH, stripH, layout } = stripDimensions();
   stripCanvas.width = stripW;
   stripCanvas.height = stripH;
   const ctx = stripCanvas.getContext('2d');
 
   // The strip is always plain white/dark ink — kept the same regardless of
   // site theme so a printed strip looks like a real photobooth strip.
-  ctx.fillStyle = STRIP_PAPER;
-  ctx.fillRect(0, 0, stripW, stripH);
-
-  shots.forEach((shotCanvas, i) => {
-    const y = PADDING + i * (FRAME_H + GAP);
-    ctx.drawImage(shotCanvas, PADDING, y, FRAME_W, FRAME_H);
-    applyPixelFilterMatrix(ctx, PADDING, y, FRAME_W, FRAME_H, FILTER_MATRICES[photoFilter]);
-    ctx.strokeStyle = 'rgba(0,0,0,0.15)';
-    ctx.lineWidth = 1;
-    ctx.strokeRect(PADDING, y, FRAME_W, FRAME_H);
-  });
-
-  drawCaptionLines(ctx, stripW, PADDING + photosH, layout);
+  drawStripContent(ctx, 0, stripW, photosH, layout);
 
   // Cut guidelines: a light dashed border at the true edge of the exported
   // image so it can be trimmed to size after printing, like a real strip.
@@ -1096,6 +1116,37 @@ async function buildStrip() {
   const inset = 5;
   ctx.strokeRect(inset, inset, stripW - inset * 2, stripH - inset * 2);
   ctx.restore();
+}
+
+// Two copies of the strip side by side for printing, sharing ONE outer
+// dashed border and ONE dashed line down the middle marking where to cut
+// them apart — not each strip carrying its own full border, which would
+// double up into two adjacent lines (plus each strip's own small margin
+// inside its border) right where they meet.
+async function buildPrintCanvas() {
+  await loadCaptionFonts();
+  const { stripW, photosH, stripH, layout } = stripDimensions();
+  const canvas = document.createElement('canvas');
+  canvas.width = stripW * 2;
+  canvas.height = stripH;
+  const ctx = canvas.getContext('2d');
+
+  drawStripContent(ctx, 0, stripW, photosH, layout);
+  drawStripContent(ctx, stripW, stripW, photosH, layout);
+
+  ctx.save();
+  ctx.strokeStyle = '#d0d0d0';
+  ctx.lineWidth = 1;
+  ctx.setLineDash([6, 5]);
+  const inset = 5;
+  ctx.strokeRect(inset, inset, canvas.width - inset * 2, stripH - inset * 2);
+  ctx.beginPath();
+  ctx.moveTo(stripW, inset);
+  ctx.lineTo(stripW, stripH - inset);
+  ctx.stroke();
+  ctx.restore();
+
+  return canvas;
 }
 
 async function runSession() {
@@ -1188,25 +1239,24 @@ saveBtn.addEventListener('click', () => {
 });
 
 printBtn.addEventListener('click', async () => {
-  // Build two copies of the strip side by side for a 4x6" photo sheet —
-  // rebuilt fresh each print so it always reflects the current strip.
-  const dataUrl = stripCanvas.toDataURL('image/png');
+  // One combined canvas with both strips side by side (see
+  // buildPrintCanvas()), sharing one outer border and one dashed line down
+  // the middle — rebuilt fresh each print so it always reflects the
+  // current strip.
+  const printCanvas = await buildPrintCanvas();
+  const dataUrl = printCanvas.toDataURL('image/png');
   printSheet.innerHTML = '';
-  const imgs = [];
-  for (let i = 0; i < 2; i++) {
-    const img = document.createElement('img');
-    img.src = dataUrl;
-    printSheet.appendChild(img);
-    imgs.push(img);
-  }
+  const img = document.createElement('img');
+  img.src = dataUrl;
+  printSheet.appendChild(img);
   // Setting img.src doesn't mean the image has actually decoded/painted yet
   // — calling window.print() immediately can capture the page before that
-  // happens, showing correctly-sized but empty boxes until the user cancels
-  // and reprints. Wait for both to actually be ready first.
-  await Promise.all(imgs.map(img => img.decode ? img.decode().catch(() => {}) : new Promise(resolve => {
+  // happens, showing a correctly-sized but empty box until the user cancels
+  // and reprints. Wait for it to actually be ready first.
+  await (img.decode ? img.decode().catch(() => {}) : new Promise(resolve => {
     if (img.complete) resolve();
     else { img.onload = resolve; img.onerror = resolve; }
-  })));
+  }));
   window.print();
 });
 
