@@ -1104,7 +1104,21 @@ function downloadStripPng() {
   link.click();
 }
 
+function isMobileDevice() {
+  const ua = navigator.userAgent || '';
+  if (/Android|iPhone|iPod|iPad/i.test(ua)) return true;
+  // iPadOS 13+ reports itself as "Macintosh" in the UA string, but exposes
+  // multi-touch unlike a real Mac.
+  if (/Macintosh/i.test(ua) && navigator.maxTouchPoints > 1) return true;
+  return false;
+}
+
 function canShareFiles() {
+  // Several desktop browsers (e.g. macOS Chrome/Safari, tied into the OS
+  // share sheet) also implement navigator.share/canShare — checking support
+  // alone isn't enough to mean "this is a phone that needs Photos access".
+  // Desktop/laptop should always just download to Files, like before.
+  if (!isMobileDevice()) return false;
   if (!navigator.canShare) return false;
   try {
     return navigator.canShare({ files: [new File([''], 'test.png', { type: 'image/png' })] });
