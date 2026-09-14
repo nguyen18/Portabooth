@@ -16,6 +16,7 @@ A browser-based photobooth ("Portabooth" — formerly named "Snapstrip" in-app; 
 - `fonts/Unna-{Regular,Bold,Italic,BoldItalic}.ttf` — vendored Unna typeface (SIL Open Font License, `fonts/Unna-OFL.txt`), used for the caption/date drawn onto the exported strip. Vendored for the same reason as the QR library: no third-party dependency at runtime.
 - `sounds/shutter.mp3` — vendored camera-shutter sound effect (user-supplied download, ~1s, no license file included alongside it — unlike the font/QR library, there's no bundled license text to point to if this is ever redistributed beyond this repo), played on each shot.
 - `sounds/lofi-loop.mp3` — vendored background music loop (user-supplied download, ~22s, same no-license-file caveat as the shutter sound), looped on every page — see "Background music" below.
+- `favicon.ico`, `icons/favicon-{16x16,32x32}.png`, `icons/apple-touch-icon.png` — favicon, generated from a user-supplied camera icon (`pikura-cam-9342564_1920.png`, cropped to content and padded to a square). Regenerate all four from the same source if the icon ever changes, don't hand-edit the small sizes independently.
 - `README.md` — one-line project blurb.
 - No package.json, no framework, no bundler. Opening the HTML file in a browser (or serving it statically) is the whole deploy story.
 - Deployed via GitHub Pages, custom domain `portabooth.studio` (DNS managed in Squarespace Domains, pointed at GitHub's Pages IPs/host). Pushing to `main` redeploys automatically — no CI step needed.
