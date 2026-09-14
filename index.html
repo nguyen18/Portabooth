@@ -783,11 +783,13 @@ function readConfigFromURL() {
 // usually be silently rejected; the toggle's label tracks bgMusic's actual
 // play/pause state (not the attempt), so it's always accurate regardless of
 // whether autoplay succeeded.
-// Music defaults to on. The toggle's label reflects this *intent*, not the
-// audio element's live paused state — actual playback often can't start
-// immediately (see below), and showing "on" from the start matches what the
-// visitor asked for rather than exposing autoplay-policy internals to them.
-let musicUserDisabled = false;
+// Default intent is set once `shared` is known, below (on for a shared
+// template link, off for the plain main page). The toggle's label reflects
+// this *intent*, not the audio element's live paused state — actual
+// playback often can't start immediately (see below), and showing the
+// intended state from the start avoids exposing autoplay-policy internals
+// to the visitor.
+let musicUserDisabled = true;
 
 function updateMusicToggleLabel() {
   musicToggle.textContent = musicUserDisabled ? '🎵 Music: off' : '🎵 Music: on';
@@ -832,9 +834,12 @@ if (shared) {
   applyConfig(config);
 }
 
-// Background music + its on/off toggle are available on every page, not
-// just shared links, and default to on — see applyMusicIntent() above for
-// how actual playback catches up as soon as it's technically allowed.
+// Background music + its on/off toggle are available on every page, but
+// default differently: on for a shared/customized template link (the
+// creator's chosen vibe carries over), off for the plain main page. See
+// applyMusicIntent() above for how actual playback catches up as soon as
+// it's technically allowed once "on".
+musicUserDisabled = !shared;
 musicToggle.style.display = 'inline-block';
 applyMusicIntent();
 
