@@ -175,6 +175,17 @@
     font-size: 0.85rem;
   }
 
+  .field-row {
+    display: flex;
+    gap: 10px;
+    width: 100%;
+  }
+
+  .field-row .field {
+    flex: 1;
+    min-width: 0;
+  }
+
   .field select,
   .field input[type="text"] {
     width: 100%;
@@ -552,13 +563,23 @@
     <div class="strip-frame">
       <canvas id="stripCanvas"></canvas>
     </div>
-    <div class="field" id="dateStyleField">
-      <label for="dateStyleSelect">Date style</label>
-      <select id="dateStyleSelect">
-        <option value="long">Sep 14, 2026</option>
-        <option value="numeric">9.14.26</option>
-        <option value="off">No date</option>
-      </select>
+    <div class="field-row">
+      <div class="field" id="dateStyleField">
+        <label for="dateStyleSelect">Date style</label>
+        <select id="dateStyleSelect">
+          <option value="long">Sep 14, 2026</option>
+          <option value="numeric">9.14.26</option>
+          <option value="off">No date</option>
+        </select>
+      </div>
+      <div class="field">
+        <label for="filterSelect">Filter</label>
+        <select id="filterSelect">
+          <option value="default">Default</option>
+          <option value="bw">Black & White</option>
+          <option value="sepia">Sepia</option>
+        </select>
+      </div>
     </div>
     <div class="save-row">
       <button id="saveBtn">Save to device</button>
@@ -608,6 +629,7 @@ const musicToggle = document.getElementById('musicToggle');
 const captionPreview = document.getElementById('captionPreview');
 const dateStyleField = document.getElementById('dateStyleField');
 const dateStyleSelect = document.getElementById('dateStyleSelect');
+const filterSelect = document.getElementById('filterSelect');
 
 const SHOT_COUNT = 4;
 const FRAME_W = 500;   // px per photo cell at capture resolution
@@ -637,6 +659,14 @@ let config = { siteTheme: 'classic', caption: 'Portabooth', bold: false, italic:
 // caption, it stays a free choice for whoever is using the page right now
 // (including someone who opened a shared link), available once a strip exists.
 let dateStyle = 'long';
+
+// Photo filter — same treatment as dateStyle: a free post-capture choice,
+// not part of the shared config/URL, applied via the canvas 2D context's
+// `filter` so it's actually baked into the exported pixels (a CSS filter on
+// the <canvas> element itself would only affect on-screen display, not
+// what toDataURL()/toBlob() captures for Save/Share/Print).
+let photoFilter = 'default';
+const PHOTO_FILTERS = { default: 'none', bw: 'grayscale(100%)', sepia: 'sepia(100%)' };
 
 function applySiteTheme(siteTheme) {
   if (siteTheme === 'classic') {
@@ -939,7 +969,9 @@ async function buildStrip() {
 
   shots.forEach((shotCanvas, i) => {
     const y = PADDING + i * (FRAME_H + GAP);
+    ctx.filter = PHOTO_FILTERS[photoFilter] || 'none';
     ctx.drawImage(shotCanvas, PADDING, y, FRAME_W, FRAME_H);
+    ctx.filter = 'none';
     ctx.strokeStyle = 'rgba(0,0,0,0.15)';
     ctx.lineWidth = 1;
     ctx.strokeRect(PADDING, y, FRAME_W, FRAME_H);
@@ -1056,6 +1088,11 @@ showDateInput.addEventListener('change', onConfigFieldChange);
 // shared template.
 dateStyleSelect.addEventListener('change', () => {
   dateStyle = dateStyleSelect.value;
+  if (shots.length) buildStrip();
+});
+
+filterSelect.addEventListener('change', () => {
+  photoFilter = filterSelect.value;
   if (shots.length) buildStrip();
 });
 
