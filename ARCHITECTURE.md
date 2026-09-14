@@ -10,17 +10,19 @@ A browser-based photobooth ("Portabooth" — formerly named "Snapstrip" in-app; 
 
 ## Current state
 
-- `photobooth.html` — the entire application: markup, CSS, and JS in one file (~590 lines).
+- `index.html` — the entire application: markup, CSS, and JS in one file (~590 lines). Named `index.html` (renamed from `photobooth.html` 2026-09-14) so GitHub Pages serves it as the site root.
+- `CNAME` — custom domain (`portabooth.studio`) for GitHub Pages.
 - `qrcode.min.js` — vendored third-party QR code generator (davidshimjs/qrcodejs, MIT), loaded via a local `<script src>` tag. See "Custom template sharing" below for why it's vendored instead of a CDN `<script>` tag.
 - `fonts/Unna-{Regular,Bold,Italic,BoldItalic}.ttf` — vendored Unna typeface (SIL Open Font License, `fonts/Unna-OFL.txt`), used for the caption/date drawn onto the exported strip. Vendored for the same reason as the QR library: no third-party dependency at runtime.
 - `sounds/shutter.mp3` — vendored camera-shutter sound effect (user-supplied download, ~1s, no license file included alongside it — unlike the font/QR library, there's no bundled license text to point to if this is ever redistributed beyond this repo), played on each shot.
 - `sounds/lofi-loop.mp3` — vendored background music loop (user-supplied download, ~22s, same no-license-file caveat as the shutter sound), looped on shared/customized template links only — see "Recipient lockdown" below.
 - `README.md` — one-line project blurb.
 - No package.json, no framework, no bundler. Opening the HTML file in a browser (or serving it statically) is the whole deploy story.
+- Deployed via GitHub Pages, custom domain `portabooth.studio` (DNS managed in Squarespace Domains, pointed at GitHub's Pages IPs/host). Pushing to `main` redeploys automatically — no CI step needed.
 
 Deliberate choice, not a placeholder: [conversation with the project owner](.) concluded plain HTML/vanilla JS is the right call here over React — the app is a single screen with no routing, state is a handful of DOM refs + one `shots` array, and it uses browser APIs (`getUserMedia`, `<canvas>`, Web Share) directly, which a framework wouldn't simplify. A framework would only earn its cost if this grows multiple screens/routes or shared state across views. See "If this grows" below.
 
-## Architecture of `photobooth.html`
+## Architecture of `index.html`
 
 ### Layout (HTML)
 - `#templateNote` — one-line "Using a shared custom template" indicator, shown only when the page was opened via a link/QR that encodes a saved template (see below).
