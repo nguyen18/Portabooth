@@ -438,15 +438,19 @@
   }
 
   @media print {
-    body * { visibility: hidden; }
-    .print-sheet, .print-sheet * { visibility: visible; }
+    /* visibility:hidden alone isn't enough — hidden elements still occupy
+       layout space, so the browser paginates the entire normal page (which
+       is much taller than a 4x6" sheet) into extra blank pages. display:none
+       actually removes them from the flow, leaving only #printSheet, sized
+       to exactly fill one page. */
+    body > *:not(.print-sheet) {
+      display: none !important;
+    }
     .print-sheet {
       display: flex;
-      position: fixed;
-      top: 0;
-      left: 0;
       width: 4in;
       height: 6in;
+      margin: 0;
       align-items: center;
       justify-content: center;
     }
@@ -454,6 +458,18 @@
       width: 2in;
       height: 6in;
       object-fit: contain;
+    }
+    /* body's own padding/background still apply otherwise (it isn't hidden,
+       only its children are) and would push #printSheet off the page edges
+       or waste part of the 4x6" sheet. body::before (the curtain texture) is
+       a pseudo-element, not a DOM child, so the `>*` rule above doesn't
+       catch it either — hide it explicitly. */
+    body {
+      padding: 0;
+      background: #fff;
+    }
+    body::before {
+      display: none;
     }
   }
 </style>
