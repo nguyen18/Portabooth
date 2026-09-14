@@ -45,11 +45,12 @@ No modules, no classes — a flat script with DOM refs at the top and a handful 
 
 | Function | Responsibility |
 |---|---|
-| `initCamera()` | Requests `getUserMedia` (front camera, ideal 1280×960), binds stream to `<video>`. Shows `permHint` text on failure. Runs immediately on page load. |
+| `initCamera()` | Calls `startCamera(facingMode)` (starts on the front camera), then `enumerateDevices()` to check for more than one `videoinput` — `#flipCameraBtn` only becomes visible if a second camera actually exists (most laptops only have one). Runs immediately on page load. |
+| `startCamera(mode)` | Requests `getUserMedia` with the given `facingMode` (ideal 1280×960). Only stops the previous stream's tracks and commits `facingMode`/`video.classList('mirrored')` once the new stream has actually succeeded — a failed camera switch leaves the working camera running rather than blanking the viewfinder. Shows `permHint` text on failure. |
 | `runCountdown(seconds)` | Async, updates `#countdown` overlay text once per second via `sleep()`. |
 | `doFlash()` | CSS-opacity flash effect on `.flash` overlay plus `playShutterSound()`, triggered right before each capture. Uses a forced reflow (`void flashEl.offsetHeight`) between the "flash on" and fade-out style writes — without it, the two changes could get coalesced into a single paint and the flash would inconsistently fail to render. |
 | `playShutterSound()` | Plays the vendored `sounds/shutter.mp3` via the shared `shutterAudio` (`HTMLAudioElement`), resetting `currentTime` first so rapid repeats restart cleanly. |
-| `captureFrame()` | Grabs one frame from `<video>` onto an off-DOM `<canvas>`, cover-fit-cropped to a fixed 500×375 (4:3) cell, mirrored to match the on-screen preview. Returns the canvas. |
+| `captureFrame()` | Grabs one frame from `<video>` onto an off-DOM `<canvas>`, cover-fit-cropped to a fixed 500×375 (4:3) cell. Mirrored to match the on-screen preview only when `facingMode === 'user'` — the back camera captures un-mirrored, like a real camera. Returns the canvas. |
 | `buildStrip()` | Async. Stacks the captured canvases vertically (with padding/gaps) onto `#stripCanvas` against a fixed white background, then calls `drawCaptionLines()` for the caption band and draws the dashed cut-guide border around the full canvas edge. |
 | `renderCaptionPreview()` | Async. Draws the same caption/date band (via `computeCaptionLayout()` + `drawCaptionLines()`) onto the small `#captionPreview` canvas in the customize panel, at the same pixel width as the real strip so it's an exact preview, not an approximation. Called from `applyConfig()` and `onConfigFieldChange()` so it updates live as the user types/toggles, before any photo is taken. |
 | `computeCaptionLayout()` / `drawCaptionLines(ctx, width, top, layout)` | Shared caption logic used by both `buildStrip()` and `renderCaptionPreview()`, so the live preview and the final export can never drift out of sync. `computeCaptionLayout()` returns `{captionLine, dateLine, captionH}`; `drawCaptionLines()` draws those two lines at a given vertical offset. |
@@ -63,7 +64,7 @@ No modules, no classes — a flat script with DOM refs at the top and a handful 
 | `renderQRCode(container, text)` | Renders a QR code via the vendored `QRCode` global, retrying increasing QR "type" (matrix size) until the payload fits — the library doesn't auto-size and throws on overflow otherwise. |
 | `formatDate(date)` | Formats a `Date` per the current `dateStyle` (`'long'` → "Sep 14, 2026", `'numeric'` → "9.14.26"). |
 
-**State** is minimal and intentionally not framework-managed: `stream` (MediaStream), `shots` (array of captured `<canvas>` elements), `config` (`{siteTheme, caption, bold, italic, showDate}` — the shared/lockable template), and `dateStyle` (`'long' | 'numeric'`, **not** part of `config`/the shared URL — see below), all module-level `let` variables closed over by the functions above.
+**State** is minimal and intentionally not framework-managed: `stream` (MediaStream), `facingMode` (`'user' | 'environment'`, which camera is active — not part of `config`/the shared URL, purely a local device choice), `shots` (array of captured `<canvas>` elements), `config` (`{siteTheme, caption, bold, italic, showDate}` — the shared/lockable template), and `dateStyle` (`'long' | 'numeric'`, **not** part of `config`/the shared URL — see below), all module-level `let` variables closed over by the functions above.
 
 **Constants** controlling capture geometry: `SHOT_COUNT = 4`, `FRAME_W/FRAME_H = 500×375` (4:3), `PADDING = 30` (outer margin around the photos — the "cut to size" white border), `GAP = 14` (between photos). Caption layout: `CAPTION_FONT_SIZE = 30`, `DATE_FONT_SIZE = 20`, `CAPTION_LINE_GAP = 10`, `CAPTION_PAD = 18` (the caption band height is computed from these based on which of caption/date are actually present, not a fixed constant).
 
@@ -88,7 +89,7 @@ Because of this choice, current "frames" are limited to the built-in `SITE_THEME
 ### Mobile-specific details already handled
 - `playsinline muted autoplay` on `<video>` — required for iOS Safari to render the camera feed inline instead of forcing fullscreen.
 - `viewport` meta tag for correct scaling.
-- `facingMode: 'user'` requests the front camera by default.
+- `facingMode: 'user'` requests the front camera by default, with `#flipCameraBtn` to switch to `'environment'` (back camera) — see `startCamera()`/`initCamera()` above. The button only appears when `enumerateDevices()` reports more than one camera, so it stays hidden on typical single-webcam laptops.
 
 ## Known issues / dead code (as of 2026-09-14)
 
