@@ -1,0 +1,442 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Snapstrip</title>
+<style>
+  :root {
+    --curtain: #2b1518;
+    --curtain-dark: #1a0d0f;
+    --bulb: #ffd76a;
+    --bulb-glow: #ffb347;
+    --paper: #f5efe3;
+    --ink: #241412;
+    --brass: #b9863f;
+    --brass-dark: #8a611f;
+  }
+
+  * { box-sizing: border-box; }
+
+  html, body {
+    margin: 0;
+    min-height: 100%;
+    background:
+      radial-gradient(ellipse at top, #3a1c20 0%, var(--curtain) 45%, var(--curtain-dark) 100%);
+    font-family: 'Georgia', 'Times New Roman', serif;
+    color: var(--paper);
+  }
+
+  body {
+    padding: 24px 16px 60px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 20px;
+  }
+
+  /* velvet curtain texture stripes */
+  body::before {
+    content: "";
+    position: fixed;
+    inset: 0;
+    background: repeating-linear-gradient(
+      90deg,
+      rgba(0,0,0,0.12) 0px,
+      rgba(0,0,0,0.12) 14px,
+      rgba(255,255,255,0.02) 14px,
+      rgba(255,255,255,0.02) 28px
+    );
+    pointer-events: none;
+    z-index: 0;
+  }
+
+  header {
+    position: relative;
+    z-index: 1;
+    text-align: center;
+  }
+
+  header h1 {
+    font-family: 'Georgia', serif;
+    font-style: italic;
+    font-weight: 400;
+    font-size: 2.1rem;
+    margin: 0;
+    letter-spacing: 0.5px;
+    color: var(--bulb);
+    text-shadow: 0 0 18px rgba(255, 183, 71, 0.45);
+  }
+
+  header p {
+    margin: 6px 0 0;
+    font-size: 0.85rem;
+    color: #d8c3ae;
+    font-style: italic;
+  }
+
+  .stage {
+    position: relative;
+    z-index: 1;
+    width: 100%;
+    max-width: 420px;
+    border-radius: 6px;
+    padding: 14px;
+    background: linear-gradient(180deg, #3d2226, #241315);
+    border: 3px solid var(--brass-dark);
+    box-shadow:
+      0 0 0 1px rgba(185, 134, 63, 0.3),
+      inset 0 0 30px rgba(0,0,0,0.55),
+      0 20px 40px rgba(0,0,0,0.5);
+  }
+
+  .viewfinder {
+    position: relative;
+    width: 100%;
+    aspect-ratio: 4 / 3;
+    background: #000;
+    border-radius: 3px;
+    overflow: hidden;
+    border: 1px solid rgba(185,134,63,0.5);
+  }
+
+  video, .capture-canvas-preview {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    display: block;
+    transform: scaleX(-1); /* mirror like a real photobooth */
+  }
+
+  .countdown-overlay {
+    position: absolute;
+    inset: 0;
+    display: none;
+    align-items: center;
+    justify-content: center;
+    font-size: 5rem;
+    font-weight: bold;
+    color: var(--bulb);
+    text-shadow: 0 0 30px rgba(255,183,71,0.8);
+    background: rgba(0,0,0,0.15);
+    font-family: 'Georgia', serif;
+  }
+
+  .flash {
+    position: absolute;
+    inset: 0;
+    background: white;
+    opacity: 0;
+    pointer-events: none;
+  }
+
+  .shot-counter {
+    position: absolute;
+    top: 8px;
+    right: 10px;
+    background: rgba(0,0,0,0.55);
+    color: var(--bulb);
+    padding: 3px 10px;
+    border-radius: 20px;
+    font-size: 0.75rem;
+    letter-spacing: 1px;
+    border: 1px solid rgba(185,134,63,0.6);
+  }
+
+  .controls {
+    display: flex;
+    justify-content: center;
+    gap: 12px;
+    margin-top: 14px;
+  }
+
+  button {
+    font-family: 'Georgia', serif;
+    font-style: italic;
+    font-size: 0.95rem;
+    padding: 10px 22px;
+    border-radius: 30px;
+    border: 1px solid var(--brass);
+    background: linear-gradient(180deg, #c99a53, var(--brass-dark));
+    color: #2a1608;
+    cursor: pointer;
+    box-shadow: 0 3px 0 rgba(0,0,0,0.35);
+    transition: transform 0.08s ease;
+  }
+
+  button:active {
+    transform: translateY(2px);
+    box-shadow: 0 1px 0 rgba(0,0,0,0.35);
+  }
+
+  button:disabled {
+    opacity: 0.4;
+    cursor: default;
+  }
+
+  button.ghost {
+    background: transparent;
+    color: var(--bulb);
+    border: 1px solid rgba(255,183,71,0.5);
+    box-shadow: none;
+  }
+
+  .strip-wrap {
+    position: relative;
+    z-index: 1;
+    display: none;
+    flex-direction: column;
+    align-items: center;
+    gap: 14px;
+    width: 100%;
+    max-width: 420px;
+  }
+
+  .strip-frame {
+    background: var(--paper);
+    padding: 14px 14px 26px;
+    border-radius: 2px;
+    box-shadow: 0 10px 30px rgba(0,0,0,0.5), 0 0 0 1px rgba(0,0,0,0.08);
+  }
+
+  #stripCanvas {
+    display: block;
+    width: 100%;
+    height: auto;
+    border-radius: 1px;
+  }
+
+  .strip-caption {
+    text-align: center;
+    font-family: 'Brush Script MT', cursive, 'Georgia', serif;
+    color: var(--ink);
+    font-size: 1.1rem;
+    margin-top: 8px;
+  }
+
+  .save-row {
+    display: flex;
+    gap: 10px;
+    flex-wrap: wrap;
+    justify-content: center;
+  }
+
+  .hint {
+    font-size: 0.75rem;
+    color: #c9ac8f;
+    text-align: center;
+    max-width: 320px;
+    z-index: 1;
+  }
+
+  @media print {
+    body * { visibility: hidden; }
+    .strip-frame, .strip-frame * { visibility: visible; }
+    .strip-frame {
+      position: fixed;
+      top: 0;
+      left: 0;
+      box-shadow: none;
+      border: none;
+    }
+  }
+</style>
+</head>
+<body>
+
+  <header>
+    <h1>Snapstrip</h1>
+    <p>four frames, one strip, all yours</p>
+  </header>
+
+  <div class="stage" id="stage">
+    <div class="viewfinder">
+      <video id="video" autoplay playsinline muted></video>
+      <div class="flash" id="flash"></div>
+      <div class="countdown-overlay" id="countdown"></div>
+      <div class="shot-counter" id="shotCounter">0 / 4</div>
+    </div>
+    <div class="controls">
+      <button id="startBtn">Start the strip</button>
+      <button id="retakeBtn" class="ghost" style="display:none;">Start over</button>
+    </div>
+  </div>
+
+  <p class="hint" id="permHint">Tap "Start the strip" and allow camera access. Everything happens on your device — nothing is uploaded anywhere.</p>
+
+  <div class="strip-wrap" id="stripWrap">
+    <div class="strip-frame">
+      <canvas id="stripCanvas"></canvas>
+      <div class="strip-caption">Snapstrip · <span id="dateStamp"></span></div>
+    </div>
+    <div class="save-row">
+      <button id="saveBtn">Save to device</button>
+      <button id="shareBtn" class="ghost" style="display:none;">Share</button>
+      <button id="printBtn" class="ghost">Print</button>
+      <button id="againBtn" class="ghost">New strip</button>
+    </div>
+  </div>
+
+  <canvas id="workCanvas" style="display:none;"></canvas>
+
+<script>
+const video = document.getElementById('video');
+const startBtn = document.getElementById('startBtn');
+const retakeBtn = document.getElementById('retakeBtn');
+const countdownEl = document.getElementById('countdown');
+const flashEl = document.getElementById('flash');
+const shotCounter = document.getElementById('shotCounter');
+const stage = document.getElementById('stage');
+const stripWrap = document.getElementById('stripWrap');
+const stripCanvas = document.getElementById('stripCanvas');
+const workCanvas = document.getElementById('workCanvas');
+const permHint = document.getElementById('permHint');
+const saveBtn = document.getElementById('saveBtn');
+const shareBtn = document.getElementById('shareBtn');
+const printBtn = document.getElementById('printBtn');
+const againBtn = document.getElementById('againBtn');
+const dateStamp = document.getElementById('dateStamp');
+
+const SHOT_COUNT = 4;
+const FRAME_W = 500;   // px per photo cell at capture resolution
+const FRAME_H = 375;   // 4:3
+const PADDING = 20;
+const GAP = 14;
+
+let stream = null;
+let shots = [];
+
+async function initCamera() {
+  try {
+    stream = await navigator.mediaDevices.getUserMedia({
+      video: { facingMode: 'user', width: { ideal: 1280 }, height: { ideal: 960 } },
+      audio: false
+    });
+    video.srcObject = stream;
+    permHint.style.display = 'none';
+  } catch (err) {
+    permHint.textContent = "Couldn't access the camera — check your browser's camera permission and try again.";
+  }
+}
+initCamera();
+
+function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
+
+async function runCountdown(seconds) {
+  countdownEl.style.display = 'flex';
+  for (let i = seconds; i > 0; i--) {
+    countdownEl.textContent = i;
+    await sleep(700);
+  }
+  countdownEl.style.display = 'none';
+}
+
+function doFlash() {
+  flashEl.style.transition = 'none';
+  flashEl.style.opacity = '0.9';
+  requestAnimationFrame(() => {
+    flashEl.style.transition = 'opacity 350ms ease';
+    flashEl.style.opacity = '0';
+  });
+}
+
+function captureFrame() {
+  const w = video.videoWidth, h = video.videoHeight;
+  const c = document.createElement('canvas');
+  c.width = FRAME_W;
+  c.height = FRAME_H;
+  const ctx = c.getContext('2d');
+
+  // cover-fit crop from the live video, mirrored to match the preview
+  const srcAspect = w / h, dstAspect = FRAME_W / FRAME_H;
+  let sx, sy, sw, sh;
+  if (srcAspect > dstAspect) {
+    sh = h; sw = h * dstAspect; sx = (w - sw) / 2; sy = 0;
+  } else {
+    sw = w; sh = w / dstAspect; sx = 0; sy = (h - sh) / 2;
+  }
+  ctx.translate(FRAME_W, 0);
+  ctx.scale(-1, 1);
+  ctx.drawImage(video, sx, sy, sw, sh, 0, 0, FRAME_W, FRAME_H);
+  return c;
+}
+
+function buildStrip() {
+  const cols = 1;
+  const stripW = FRAME_W + PADDING * 2;
+  const stripH = PADDING * 2 + shots.length * FRAME_H + (shots.length - 1) * GAP;
+  stripCanvas.width = stripW;
+  stripCanvas.height = stripH;
+  const ctx = stripCanvas.getContext('2d');
+
+  ctx.fillStyle = '#f5efe3';
+  ctx.fillRect(0, 0, stripW, stripH);
+
+  shots.forEach((shotCanvas, i) => {
+    const y = PADDING + i * (FRAME_H + GAP);
+    ctx.drawImage(shotCanvas, PADDING, y, FRAME_W, FRAME_H);
+    ctx.strokeStyle = 'rgba(0,0,0,0.15)';
+    ctx.lineWidth = 1;
+    ctx.strokeRect(PADDING, y, FRAME_W, FRAME_H);
+  });
+}
+
+async function runSession() {
+  shots = [];
+  startBtn.disabled = true;
+  startBtn.style.display = 'none';
+  retakeBtn.style.display = 'none';
+  stripWrap.style.display = 'none';
+  stage.style.display = 'block';
+
+  for (let i = 0; i < SHOT_COUNT; i++) {
+    shotCounter.textContent = `${i} / ${SHOT_COUNT}`;
+    await runCountdown(3);
+    doFlash();
+    await sleep(120);
+    shots.push(captureFrame());
+    shotCounter.textContent = `${i + 1} / ${SHOT_COUNT}`;
+    await sleep(500);
+  }
+
+  buildStrip();
+  const now = new Date();
+  dateStamp.textContent = now.toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' });
+  stripWrap.style.display = 'flex';
+  startBtn.disabled = false;
+  startBtn.style.display = 'inline-block';
+  startBtn.textContent = 'Start the strip';
+}
+
+startBtn.addEventListener('click', runSession);
+againBtn.addEventListener('click', () => {
+  stripWrap.style.display = 'none';
+});
+
+saveBtn.addEventListener('click', () => {
+  const link = document.createElement('a');
+  link.download = `snapstrip-${Date.now()}.png`;
+  link.href = stripCanvas.toDataURL('image/png');
+  link.click();
+});
+
+printBtn.addEventListener('click', () => {
+  window.print();
+});
+
+if (navigator.canShare) {
+  shareBtn.style.display = 'inline-block';
+}
+shareBtn.addEventListener('click', () => {
+  stripCanvas.toBlob(async (blob) => {
+    const file = new File([blob], 'snapstrip.png', { type: 'image/png' });
+    if (navigator.canShare && navigator.canShare({ files: [file] })) {
+      try {
+        await navigator.share({ files: [file], title: 'My Snapstrip' });
+      } catch (e) { /* user cancelled */ }
+    }
+  });
+});
+</script>
+</body>
+</html>
