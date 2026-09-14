@@ -578,6 +578,7 @@
           <option value="default">Default</option>
           <option value="bw">Black & White</option>
           <option value="sepia">Sepia</option>
+          <option value="saturated">Saturated</option>
         </select>
       </div>
     </div>
@@ -666,7 +667,7 @@ let dateStyle = 'long';
 // the <canvas> element itself would only affect on-screen display, not
 // what toDataURL()/toBlob() captures for Save/Share/Print).
 let photoFilter = 'default';
-const PHOTO_FILTERS = { default: 'none', bw: 'grayscale(100%)', sepia: 'sepia(100%)' };
+const PHOTO_FILTERS = { default: 'none', bw: 'grayscale(100%)', sepia: 'sepia(100%)', saturated: 'saturate(220%)' };
 
 function applySiteTheme(siteTheme) {
   if (siteTheme === 'classic') {
@@ -903,6 +904,12 @@ function computeCaptionLayout() {
   if (captionLine && dateLine) captionH += CAPTION_LINE_GAP;
   if (dateLine) captionH += DATE_FONT_SIZE;
   if (captionH) captionH += CAPTION_PAD * 2;
+  // If there's a caption but no date, add back the vertical space a date
+  // line would have taken (its gap + font size) as extra bottom padding
+  // instead of just shrinking the strip — keeps the overall exported/print
+  // size the same whether or not the date is shown, rather than surprising
+  // someone with a shorter strip just for turning the date off.
+  if (captionLine && !dateLine) captionH += CAPTION_LINE_GAP + DATE_FONT_SIZE;
   return { captionLine, dateLine, captionH };
 }
 
