@@ -482,6 +482,15 @@
     body::before {
       display: none;
     }
+    /* Belt-and-suspenders: some mobile WebKit versions render a <video>
+       with a live camera stream via a separate hardware-compositing layer
+       that doesn't reliably respect display:none inherited from an
+       ancestor during print — it can show through as a solid-color block
+       on top of the print output. Target it directly, in addition to
+       actually detaching the stream in JS (see beforeprint/afterprint). */
+    video {
+      display: none !important;
+    }
   }
 </style>
 </head>
@@ -1044,11 +1053,42 @@ againBtn.addEventListener('click', () => {
   stripWrap.style.display = 'none';
 });
 
-saveBtn.addEventListener('click', () => {
+function downloadStripPng() {
   const link = document.createElement('a');
   link.download = `portabooth-${Date.now()}.png`;
   link.href = stripCanvas.toDataURL('image/png');
   link.click();
+}
+
+function canShareFiles() {
+  if (!navigator.canShare) return false;
+  try {
+    return navigator.canShare({ files: [new File([''], 'test.png', { type: 'image/png' })] });
+  } catch (e) {
+    return false;
+  }
+}
+
+saveBtn.addEventListener('click', () => {
+  // A plain download link always lands in Files/Downloads on mobile, never
+  // the Photos/Gallery app — there's no direct "save to Photos" API exposed
+  // to web pages (privacy/security). The native share sheet (same mechanism
+  // as shareBtn below) is the only cross-platform way to offer "Save
+  // Image"/"Save to Photos" from a web page, so try that first where
+  // supported, and only fall back to a plain download if sharing isn't
+  // available or genuinely fails — not if the visitor just cancels the sheet.
+  if (!canShareFiles()) {
+    downloadStripPng();
+    return;
+  }
+  stripCanvas.toBlob(async (blob) => {
+    const file = new File([blob], `portabooth-${Date.now()}.png`, { type: 'image/png' });
+    try {
+      await navigator.share({ files: [file] });
+    } catch (e) {
+      if (e.name !== 'AbortError') downloadStripPng();
+    }
+  });
 });
 
 printBtn.addEventListener('click', async () => {
@@ -1072,6 +1112,23 @@ printBtn.addEventListener('click', async () => {
     else { img.onload = resolve; img.onerror = resolve; }
   })));
   window.print();
+});
+
+// Actually detach the live camera stream during printing, not just hide the
+// <video> via CSS — some mobile WebKit versions render a video element with
+// an active stream through a separate hardware-compositing layer that can
+// show through the print output as a solid-color block even when its
+// ancestors are display:none. Reattaching afterprint resumes the same
+// stream (no new getUserMedia prompt). beforeprint/afterprint fire whether
+// the visitor actually prints or cancels the dialog.
+window.addEventListener('beforeprint', () => {
+  if (video.srcObject) video.srcObject = null;
+});
+window.addEventListener('afterprint', () => {
+  if (stream && !video.srcObject) {
+    video.srcObject = stream;
+    video.play().catch(() => {});
+  }
 });
 
 if (navigator.canShare) {
