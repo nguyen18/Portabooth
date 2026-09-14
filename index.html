@@ -924,7 +924,14 @@ function drawCaptionLines(ctx, width, top, layout) {
 
   if (layout.captionLine) {
     ctx.font = captionFont(CAPTION_FONT_SIZE);
-    // Sit 2px lower when there's no date line beneath it to keep balanced.
+    // These two values (4 and 6) were tuned empirically, not derived from a
+    // formula: the caption (32px) and date (22px) lines use different font
+    // sizes, so they have different descent metrics, and a naive "same
+    // offset either way" does NOT produce equal bottom padding when the
+    // caption is the last line (no date) vs. when the date is (see
+    // ARCHITECTURE.md "Caption vertical offset" for the measured numbers).
+    // 6 was verified to match 4's resulting bottom margin exactly — don't
+    // "simplify" this back to a single shared value without re-measuring.
     const captionYOffset = layout.dateLine ? 4 : 6;
     ctx.fillText(layout.captionLine, width / 2, y + captionYOffset);
     y += CAPTION_FONT_SIZE + CAPTION_LINE_GAP;
@@ -1034,16 +1041,26 @@ saveBtn.addEventListener('click', () => {
   link.click();
 });
 
-printBtn.addEventListener('click', () => {
+printBtn.addEventListener('click', async () => {
   // Build two copies of the strip side by side for a 4x6" photo sheet —
   // rebuilt fresh each print so it always reflects the current strip.
   const dataUrl = stripCanvas.toDataURL('image/png');
   printSheet.innerHTML = '';
+  const imgs = [];
   for (let i = 0; i < 2; i++) {
     const img = document.createElement('img');
     img.src = dataUrl;
     printSheet.appendChild(img);
+    imgs.push(img);
   }
+  // Setting img.src doesn't mean the image has actually decoded/painted yet
+  // — calling window.print() immediately can capture the page before that
+  // happens, showing correctly-sized but empty boxes until the user cancels
+  // and reprints. Wait for both to actually be ready first.
+  await Promise.all(imgs.map(img => img.decode ? img.decode().catch(() => {}) : new Promise(resolve => {
+    if (img.complete) resolve();
+    else { img.onload = resolve; img.onerror = resolve; }
+  })));
   window.print();
 });
 
