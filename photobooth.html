@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Snapstrip</title>
+<title>Portabooth</title>
 <style>
   @font-face {
     font-family: 'Unna';
@@ -242,6 +242,19 @@
     line-height: 0;
   }
 
+  .caption-preview-frame {
+    background: #ffffff;
+    border-radius: 2px;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.35), 0 0 0 1px rgba(0,0,0,0.08);
+    overflow: hidden;
+  }
+
+  #captionPreview {
+    display: block;
+    width: 100%;
+    height: auto;
+  }
+
   .stage {
     position: relative;
     z-index: 1;
@@ -405,7 +418,7 @@
 <body>
 
   <header>
-    <h1>Snapstrip</h1>
+    <h1>Portabooth</h1>
     <p>four frames, one strip, all yours</p>
   </header>
 
@@ -426,7 +439,7 @@
 
     <div class="field">
       <label for="captionInput">Caption</label>
-      <input type="text" id="captionInput" maxlength="40" value="Snapstrip">
+      <input type="text" id="captionInput" maxlength="40" value="Portabooth">
     </div>
 
     <div class="style-toggle-row">
@@ -438,6 +451,13 @@
       <input type="checkbox" id="showDateInput" checked>
       Show date on strip
     </label>
+
+    <div class="field">
+      <label>Preview</label>
+      <div class="caption-preview-frame">
+        <canvas id="captionPreview"></canvas>
+      </div>
+    </div>
 
     <button id="getLinkBtn" type="button">Get shareable link</button>
 
@@ -516,6 +536,7 @@ const copyLinkBtn = document.getElementById('copyLinkBtn');
 const qrOutput = document.getElementById('qrOutput');
 const templateNote = document.getElementById('templateNote');
 const customizeDetails = document.getElementById('customize');
+const captionPreview = document.getElementById('captionPreview');
 const dateStyleField = document.getElementById('dateStyleField');
 const dateStyleSelect = document.getElementById('dateStyleSelect');
 
@@ -540,7 +561,7 @@ const SITE_THEMES = ['classic', 'noir', 'blush', 'mint'];
 
 let stream = null;
 let shots = [];
-let config = { siteTheme: 'classic', caption: 'Snapstrip', bold: false, italic: false, showDate: true };
+let config = { siteTheme: 'classic', caption: 'Portabooth', bold: false, italic: false, showDate: true };
 
 // Date format is deliberately NOT part of the shared config — unlike the
 // caption, it stays a free choice for whoever is using the page right now
@@ -564,6 +585,7 @@ function applyConfig(cfg) {
   italicInput.checked = config.italic;
   showDateInput.checked = config.showDate;
   dateStyleField.style.display = config.showDate ? '' : 'none';
+  renderCaptionPreview();
 }
 
 // Template sharing: the whole customization (theme + caption + date toggle) is
@@ -581,7 +603,7 @@ function decodeConfig(str) {
     const parsed = JSON.parse(json);
     return {
       siteTheme: SITE_THEMES.includes(parsed.siteTheme) ? parsed.siteTheme : 'classic',
-      caption: typeof parsed.caption === 'string' ? parsed.caption.slice(0, 40) : 'Snapstrip',
+      caption: typeof parsed.caption === 'string' ? parsed.caption.slice(0, 40) : 'Portabooth',
       bold: !!parsed.bold,
       italic: !!parsed.italic,
       showDate: !!parsed.showDate
@@ -677,27 +699,69 @@ function formatDate(date) {
   return date.toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' });
 }
 
-async function buildStrip() {
-  const dateStr = formatDate(new Date());
+// Shared by buildStrip() (the real export) and renderCaptionPreview() (the
+// live customize-panel preview) so the two can never drift out of sync.
+function computeCaptionLayout() {
   const captionLine = config.caption.trim();
-  const dateLine = config.showDate ? dateStr : '';
+  const dateLine = config.showDate ? formatDate(new Date()) : '';
+  let captionH = 0;
+  if (captionLine) captionH += CAPTION_FONT_SIZE;
+  if (captionLine && dateLine) captionH += CAPTION_LINE_GAP;
+  if (dateLine) captionH += DATE_FONT_SIZE;
+  if (captionH) captionH += CAPTION_PAD * 2;
+  return { captionLine, dateLine, captionH };
+}
 
+async function loadCaptionFonts() {
   // Unna must actually be loaded before ctx.font can use it, or the canvas
   // silently falls back to the default serif font.
   await Promise.all([
     document.fonts.load(captionFont(CAPTION_FONT_SIZE)),
     document.fonts.load(captionFont(DATE_FONT_SIZE))
   ]);
+}
 
-  let captionH = 0;
-  if (captionLine) captionH += CAPTION_FONT_SIZE;
-  if (captionLine && dateLine) captionH += CAPTION_LINE_GAP;
-  if (dateLine) captionH += DATE_FONT_SIZE;
-  if (captionH) captionH += CAPTION_PAD * 2;
+function drawCaptionLines(ctx, width, top, layout) {
+  if (!layout.captionH) return;
+  ctx.fillStyle = STRIP_INK;
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'top';
+  let y = top + CAPTION_PAD;
+
+  if (layout.captionLine) {
+    ctx.font = captionFont(CAPTION_FONT_SIZE);
+    ctx.fillText(layout.captionLine, width / 2, y);
+    y += CAPTION_FONT_SIZE + CAPTION_LINE_GAP;
+  }
+  if (layout.dateLine) {
+    ctx.font = captionFont(DATE_FONT_SIZE);
+    ctx.fillText(layout.dateLine, width / 2, y);
+  }
+}
+
+// Live preview shown in the customize panel, before any photos are taken.
+// Renders the same caption/date band buildStrip() will produce, at the same
+// pixel width, so it's an exact preview rather than an approximation.
+async function renderCaptionPreview() {
+  await loadCaptionFonts();
+  const layout = computeCaptionLayout();
+  const width = FRAME_W + PADDING * 2;
+  const height = Math.max(layout.captionH, CAPTION_PAD * 2 + CAPTION_FONT_SIZE);
+  captionPreview.width = width;
+  captionPreview.height = height;
+  const ctx = captionPreview.getContext('2d');
+  ctx.fillStyle = STRIP_PAPER;
+  ctx.fillRect(0, 0, width, height);
+  drawCaptionLines(ctx, width, 0, layout);
+}
+
+async function buildStrip() {
+  await loadCaptionFonts();
+  const layout = computeCaptionLayout();
 
   const stripW = FRAME_W + PADDING * 2;
   const photosH = shots.length * FRAME_H + (shots.length - 1) * GAP;
-  const stripH = PADDING * 2 + photosH + captionH;
+  const stripH = PADDING * 2 + photosH + layout.captionH;
   stripCanvas.width = stripW;
   stripCanvas.height = stripH;
   const ctx = stripCanvas.getContext('2d');
@@ -715,24 +779,7 @@ async function buildStrip() {
     ctx.strokeRect(PADDING, y, FRAME_W, FRAME_H);
   });
 
-  if (captionH) {
-    ctx.fillStyle = STRIP_INK;
-    ctx.textAlign = 'center';
-    const bandTop = PADDING + photosH;
-    let y = bandTop + CAPTION_PAD;
-
-    if (captionLine) {
-      ctx.font = captionFont(CAPTION_FONT_SIZE);
-      ctx.textBaseline = 'top';
-      ctx.fillText(captionLine, stripW / 2, y);
-      y += CAPTION_FONT_SIZE + CAPTION_LINE_GAP;
-    }
-    if (dateLine) {
-      ctx.font = captionFont(DATE_FONT_SIZE);
-      ctx.textBaseline = 'top';
-      ctx.fillText(dateLine, stripW / 2, y);
-    }
-  }
+  drawCaptionLines(ctx, stripW, PADDING + photosH, layout);
 
   // Cut guidelines: a light dashed border at the true edge of the exported
   // image so it can be trimmed to size after printing, like a real strip.
@@ -777,7 +824,7 @@ againBtn.addEventListener('click', () => {
 
 saveBtn.addEventListener('click', () => {
   const link = document.createElement('a');
-  link.download = `snapstrip-${Date.now()}.png`;
+  link.download = `portabooth-${Date.now()}.png`;
   link.href = stripCanvas.toDataURL('image/png');
   link.click();
 });
@@ -791,17 +838,18 @@ if (navigator.canShare) {
 }
 shareBtn.addEventListener('click', () => {
   stripCanvas.toBlob(async (blob) => {
-    const file = new File([blob], 'snapstrip.png', { type: 'image/png' });
+    const file = new File([blob], 'portabooth.png', { type: 'image/png' });
     if (navigator.canShare && navigator.canShare({ files: [file] })) {
       try {
-        await navigator.share({ files: [file], title: 'My Snapstrip' });
+        await navigator.share({ files: [file], title: 'My Portabooth' });
       } catch (e) { /* user cancelled */ }
     }
   });
 });
 
-// Live-update an already-captured strip if the customize fields change afterward,
-// so Save/Share/Print always reflect the current caption/style/date settings.
+// Live-update the customize-panel preview (always) and an already-captured
+// strip (if one exists), so everything reflects the current settings as the
+// user types/toggles, with no extra "apply" step.
 function onConfigFieldChange() {
   config = {
     siteTheme: siteThemeSelect.value,
@@ -812,6 +860,7 @@ function onConfigFieldChange() {
   };
   applySiteTheme(config.siteTheme);
   dateStyleField.style.display = config.showDate ? '' : 'none';
+  renderCaptionPreview();
   if (shots.length) buildStrip();
 }
 siteThemeSelect.addEventListener('change', onConfigFieldChange);

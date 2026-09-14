@@ -4,7 +4,7 @@ Deep-dive reference for future sessions/agents working on this repo. Read this b
 
 ## What this project is
 
-A browser-based photobooth ("Snapstrip"). User taps a button, the browser's webcam captures 4 photos on a countdown timer, and the shots are composited into a single vertical photo-strip image (like a real photobooth strip) that can be saved, shared, or printed.
+A browser-based photobooth ("Portabooth" — formerly named "Snapstrip" in-app; renamed 2026-09-14 to match the repo/product name). User taps a button, the browser's webcam captures 4 photos on a countdown timer, and the shots are composited into a single vertical photo-strip image (like a real photobooth strip) that can be saved, shared, or printed.
 
 **Everything happens client-side.** No backend, no server, no build step, no dependencies. The camera feed and captured images never leave the device — there is nothing to upload to.
 
@@ -22,7 +22,7 @@ Deliberate choice, not a placeholder: [conversation with the project owner](.) c
 
 ### Layout (HTML)
 - `#templateNote` — one-line "Using a shared custom template" indicator, shown only when the page was opened via a link/QR that encodes a saved template (see below).
-- `.customize` (`<details>`) — the template editor: site-theme `<select>`, caption `<input>`, Bold/Italic style checkboxes, show-date checkbox, and the "Get shareable link" flow (link `<input readonly>` + copy button + `#qrOutput` QR code container). Collapsed by default so the primary shoot flow stays uncluttered.
+- `.customize` (`<details>`) — the template editor: site-theme `<select>`, caption `<input>`, Bold/Italic style checkboxes, show-date checkbox, a live `#captionPreview` canvas, and the "Get shareable link" flow (link `<input readonly>` + copy button + `#qrOutput` QR code container). Collapsed by default so the primary shoot flow stays uncluttered.
 - `.stage` — the live camera view: `<video>` element (mirrored front camera feed), flash overlay, countdown overlay, shot counter (`0 / 4` etc.), and the Start/Retake buttons.
 - `#permHint` — camera-permission helper text shown before capture / on `getUserMedia` failure.
 - `.strip-wrap` — the result screen: rendered photo strip (`<canvas id="stripCanvas">`), a `#dateStyleField` date-format `<select>` (only visible once a strip exists and `config.showDate` is true), and the Save / Share / Print / New-strip buttons. Hidden until a session completes. The caption/date text and the cut-guide dashes are drawn directly onto the canvas (not a separate DOM overlay) so they're included in Save/Share/Print output — see "Custom template sharing" below.
@@ -44,8 +44,11 @@ No modules, no classes — a flat script with DOM refs at the top and a handful 
 | `runCountdown(seconds)` | Async, updates `#countdown` overlay text once per second via `sleep()`. |
 | `doFlash()` | CSS-opacity flash effect on `.flash` overlay, triggered right before each capture. |
 | `captureFrame()` | Grabs one frame from `<video>` onto an off-DOM `<canvas>`, cover-fit-cropped to a fixed 500×375 (4:3) cell, mirrored to match the on-screen preview. Returns the canvas. |
-| `buildStrip()` | Async. Stacks the captured canvases vertically (with padding/gaps) onto `#stripCanvas` against a fixed white background, awaits the Unna variant it needs via `document.fonts.load(...)`, draws the caption line and date line (two separate lines, each vertically stacked and centered) in `STRIP_INK`, then draws the dashed cut-guide border around the full canvas edge. |
+| `buildStrip()` | Async. Stacks the captured canvases vertically (with padding/gaps) onto `#stripCanvas` against a fixed white background, then calls `drawCaptionLines()` for the caption band and draws the dashed cut-guide border around the full canvas edge. |
+| `renderCaptionPreview()` | Async. Draws the same caption/date band (via `computeCaptionLayout()` + `drawCaptionLines()`) onto the small `#captionPreview` canvas in the customize panel, at the same pixel width as the real strip so it's an exact preview, not an approximation. Called from `applyConfig()` and `onConfigFieldChange()` so it updates live as the user types/toggles, before any photo is taken. |
+| `computeCaptionLayout()` / `drawCaptionLines(ctx, width, top, layout)` | Shared caption logic used by both `buildStrip()` and `renderCaptionPreview()`, so the live preview and the final export can never drift out of sync. `computeCaptionLayout()` returns `{captionLine, dateLine, captionH}`; `drawCaptionLines()` draws those two lines at a given vertical offset. |
 | `captionFont(size)` | Builds a canvas `font` shorthand string (`italic bold 30px Unna, Georgia, serif`) from the current `config.bold`/`config.italic`, used both to draw text and to `document.fonts.load()` the right variant. |
+| `loadCaptionFonts()` | Awaits `document.fonts.load()` for both caption/date sizes before any caption drawing — Unna must be loaded before `ctx.font` can use it, or canvas silently falls back to the default serif font. |
 | `runSession()` | Orchestrates one full run: resets `shots`, loops 4× doing countdown → flash → capture, then `await`s `buildStrip()` and reveals the result screen. |
 | Save/Share/Print handlers | `saveBtn` → `canvas.toDataURL('image/png')` download link. `shareBtn` → `navigator.share` with a `File` (only shown if `navigator.canShare` exists). `printBtn` → `window.print()`. `againBtn` → hides the result screen to shoot again. |
 | `applySiteTheme(siteTheme)` / `applyConfig(cfg)` | Sets/removes `data-theme` on `<html>` (page chrome only) and syncs the customize form fields to a `config` object. |
