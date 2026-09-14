@@ -36,7 +36,7 @@ Deliberate choice, not a placeholder: [conversation with the project owner](.) c
 
 ### Styling
 Single `<style>` block. Two independent color systems, which was a point of real confusion during development and is worth keeping straight:
-- **Site theme** — CSS custom properties for the "velvet curtain photobooth" *page chrome* (`--curtain`, `--bulb`, `--brass`, etc.), defined on `:root` and overridden via `:root[data-theme="noir|blush|mint"]`. Controlled by the "Site theme" select. Does **not** affect the exported strip.
+- **Site theme** — CSS custom properties for the "velvet curtain photobooth" *page chrome* (`--curtain`, `--bulb`, `--brass`, etc.), defined on `:root` and overridden via `:root[data-theme="noir|blush|mint|sanrio"]`. Controlled by the "Site theme" select. Does **not** affect the exported strip. `sanrio` is an original pastel-pink/kawaii-coded palette (raspberry curtain, near-white bow-colored glow) — not any actual Sanrio artwork, logo, or character, which would be a licensing issue; it's a color theme "in that vein," same as how `blush`/`mint` aren't tied to a specific brand.
 - **Strip appearance** — always plain white paper with dark ink (`STRIP_PAPER`/`STRIP_INK` constants in JS), regardless of site theme, so a printed strip always looks like a real photobooth strip. `.strip-frame` background is hardcoded `#ffffff` for the same reason.
 
 Four `@font-face` declarations load the vendored Unna weights/styles (regular/bold/italic/bold-italic) for the canvas-drawn caption. Includes a `@media print` rule so "Print" only prints the strip, not the whole page chrome.
@@ -79,7 +79,7 @@ This was chosen over two heavier alternatives (still on the table if requirement
 - **Full accounts** — login + per-user frame management. Rejected as overkill for "share one template with someone."
 - **Minimal serverless storage** — real image upload, stored server-side under a short ID. Would be needed if arbitrary custom frame *graphics* (not just theme/caption) become a requirement, since an uploaded image can't reasonably live inside a URL/QR code. This is the natural next step if that's ever wanted — see the conversation history around 2026-09-14 for the fuller tradeoff writeup.
 
-Because of this choice, current "frames" are limited to the built-in `SITE_THEMES` list (`classic`, `noir`, `blush`, `mint`) plus free-text caption/style and a date toggle — not arbitrary uploaded graphics. Keep the encoded payload small (short strings/booleans only) so the QR code stays scannable.
+Because of this choice, current "frames" are limited to the built-in `SITE_THEMES` list (`classic`, `noir`, `blush`, `mint`, `sanrio`) plus free-text caption/style and a date toggle — not arbitrary uploaded graphics. Keep the encoded payload small (short strings/booleans only) so the QR code stays scannable.
 
 `qrcode.min.js` is vendored (copied into the repo) rather than loaded from a CDN `<script src>` specifically to preserve the app's "everything runs on your device, no network dependency beyond the camera" property — a CDN script would make template rendering depend on a third party being up.
 

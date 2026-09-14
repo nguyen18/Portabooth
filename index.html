@@ -78,6 +78,17 @@
     --brass-dark: #3f8a6d;
   }
 
+  :root[data-theme="sanrio"] {
+    --curtain: #7a1f3d;
+    --curtain-dark: #4a0f26;
+    --bulb: #fff5f8;
+    --bulb-glow: #ffb6cf;
+    --paper: #fff0f5;
+    --ink: #6b1f3d;
+    --brass: #ffb6cf;
+    --brass-dark: #ff8fb3;
+  }
+
   * { box-sizing: border-box; }
 
   html, body {
@@ -520,6 +531,7 @@
         <option value="noir">Noir</option>
         <option value="blush">Blush</option>
         <option value="mint">Mint</option>
+        <option value="sanrio">Sanrio</option>
       </select>
     </div>
 
@@ -662,7 +674,7 @@ const CAPTION_PAD = 18; // top/bottom padding around the caption block
 
 // Site theme = the website's own color scheme (curtain/bulb/brass/etc). It no
 // longer affects the exported photo strip, which always stays white/dark ink.
-const SITE_THEMES = ['classic', 'noir', 'blush', 'mint'];
+const SITE_THEMES = ['classic', 'noir', 'blush', 'mint', 'sanrio'];
 
 let stream = null;
 let facingMode = 'user';
