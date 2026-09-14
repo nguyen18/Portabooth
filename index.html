@@ -667,7 +667,7 @@ let dateStyle = 'long';
 // the <canvas> element itself would only affect on-screen display, not
 // what toDataURL()/toBlob() captures for Save/Share/Print).
 let photoFilter = 'default';
-const PHOTO_FILTERS = { default: 'none', bw: 'grayscale(100%)', sepia: 'sepia(100%)', saturated: 'saturate(220%)' };
+const PHOTO_FILTERS = { default: 'none', bw: 'grayscale(100%)', sepia: 'sepia(100%)', saturated: 'saturate(198%)' };
 
 function applySiteTheme(siteTheme) {
   if (siteTheme === 'classic') {
@@ -926,21 +926,24 @@ function drawCaptionLines(ctx, width, top, layout) {
   if (!layout.captionH) return;
   ctx.fillStyle = STRIP_INK;
   ctx.textAlign = 'center';
+
+  if (layout.captionLine && !layout.dateLine) {
+    // Caption is the only content (no date): center it vertically in the
+    // whole white-space band, using the canvas's own 'middle' baseline
+    // rather than a hand-computed offset — robust regardless of font metrics.
+    ctx.textBaseline = 'middle';
+    ctx.font = captionFont(CAPTION_FONT_SIZE);
+    ctx.fillText(layout.captionLine, width / 2, top + layout.captionH / 2);
+    return;
+  }
+
   ctx.textBaseline = 'top';
   let y = top + CAPTION_PAD;
-
   if (layout.captionLine) {
     ctx.font = captionFont(CAPTION_FONT_SIZE);
-    // These two values (4 and 6) were tuned empirically, not derived from a
-    // formula: the caption (32px) and date (22px) lines use different font
-    // sizes, so they have different descent metrics, and a naive "same
-    // offset either way" does NOT produce equal bottom padding when the
-    // caption is the last line (no date) vs. when the date is (see
-    // ARCHITECTURE.md "Caption vertical offset" for the measured numbers).
-    // 6 was verified to match 4's resulting bottom margin exactly — don't
-    // "simplify" this back to a single shared value without re-measuring.
-    const captionYOffset = layout.dateLine ? 4 : 6;
-    ctx.fillText(layout.captionLine, width / 2, y + captionYOffset);
+    // Small nudge down so the caption sits visually balanced above the date
+    // line beneath it — see ARCHITECTURE.md "Caption vertical offset".
+    ctx.fillText(layout.captionLine, width / 2, y + 4);
     y += CAPTION_FONT_SIZE + CAPTION_LINE_GAP;
   }
   if (layout.dateLine) {
