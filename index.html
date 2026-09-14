@@ -563,7 +563,7 @@
     <div class="save-row">
       <button id="saveBtn">Save to device</button>
       <button id="shareBtn" class="ghost" style="display:none;">Share</button>
-      <button id="printBtn" class="ghost">Download PDF</button>
+      <button id="printBtn" class="ghost">Print</button>
       <button id="againBtn" class="ghost">New strip</button>
     </div>
   </div>
@@ -1179,8 +1179,7 @@ saveBtn.addEventListener('click', () => {
 // in it, and prints it later from a PDF viewer (Preview, Acrobat, their
 // phone's Files app, etc.), which doesn't carry any of that webpage-print
 // baggage.
-printBtn.addEventListener('click', async () => {
-  const printCanvas = await buildPrintCanvas();
+function buildPrintPdf(printCanvas) {
   const dataUrl = printCanvas.toDataURL('image/png');
 
   const PAGE_W_IN = 4, PAGE_H_IN = 6;
@@ -1196,7 +1195,43 @@ printBtn.addEventListener('click', async () => {
   const { jsPDF } = window.jspdf;
   const doc = new jsPDF({ unit: 'in', format: [PAGE_W_IN, PAGE_H_IN], orientation: 'portrait' });
   doc.addImage(dataUrl, 'PNG', x, y, drawW, drawH);
-  doc.save(`portabooth-${Date.now()}.pdf`);
+  return doc;
+}
+
+printBtn.addEventListener('click', async () => {
+  // Open a blank window synchronously, still inside this click's user
+  // gesture — most browsers only allow window.open() without popup-blocking
+  // when it's called directly from an event handler, not after an `await`.
+  // We navigate this window to the real PDF once it's built below.
+  const printWindow = window.open('', '_blank');
+
+  const printCanvas = await buildPrintCanvas();
+  const doc = buildPrintPdf(printCanvas);
+  const blobUrl = doc.output('bloburl');
+
+  if (!printWindow) {
+    // Popup blocked despite opening synchronously (some browsers/extensions
+    // block regardless) — fall back to a plain download so the visitor
+    // still gets the PDF somehow.
+    doc.save(`portabooth-${Date.now()}.pdf`);
+    return;
+  }
+
+  // Attach the load listener BEFORE navigating, so there's no race where
+  // the (same-origin, since blob: URLs inherit the opener's origin) load
+  // event could fire before we're listening for it. Once the browser's
+  // native PDF viewer has rendered the file, trigger its print flow
+  // directly -- this prints the PDF document itself (no injected webpage
+  // header/footer, since nothing here is "printing a webpage").
+  printWindow.addEventListener('load', () => {
+    // The window's load event fires once the PDF bytes have arrived, but
+    // the native PDF viewer plugin can take a moment longer to actually
+    // finish rendering — calling print() the instant load fires has been
+    // known to occasionally race ahead of that in some browsers. A short
+    // delay is a common, pragmatic mitigation for this exact scenario.
+    setTimeout(() => printWindow.print(), 300);
+  });
+  printWindow.location.href = blobUrl;
 });
 
 if (navigator.canShare) {
