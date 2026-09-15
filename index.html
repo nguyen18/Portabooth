@@ -452,14 +452,73 @@
     z-index: 1;
   }
 
-  /* Note: there is deliberately no @media print / @page CSS here anymore.
-     "Print" now generates a real standalone PDF (via jsPDF) instead of
-     using window.print() on the live page — see printBtn's handler and
-     ARCHITECTURE.md "Print layout" for why: the browser/OS print pipeline
-     for printing a *webpage* unavoidably injects its own header/footer
-     (URL, date, page count) and its own unprintable margins that can't be
-     fully controlled from CSS, which a self-generated PDF file sidesteps
-     entirely. */
+  /* Print: two copies of the strip side by side on a 4x6" photo sheet —
+     the standard way a photobooth strip gets printed, cut down the middle.
+     DESKTOP ONLY: on mobile, printBtn routes through the native share
+     sheet instead (see printBtn's click handler) — sharing a plain image
+     hits the OS's photo-print pipeline, not the "print this webpage"
+     pipeline this CSS targets, which handles borderless printing far more
+     gracefully and doesn't get the fixes below at all (it doesn't need
+     them). See ARCHITECTURE.md "Print layout" for the fuller history of
+     why this is split by platform. */
+  @page {
+    size: 4in 6in;
+    margin: 0;
+  }
+
+  .print-sheet {
+    display: none;
+  }
+
+  @media print {
+    /* visibility:hidden alone isn't enough — hidden elements still occupy
+       layout space, so the browser paginates the entire normal page (which
+       is much taller than a 4x6" sheet) into extra blank pages. display:none
+       actually removes them from the flow, leaving only #printSheet, sized
+       to exactly fill one page. */
+    body > *:not(.print-sheet) {
+      display: none !important;
+    }
+    .print-sheet {
+      display: flex;
+      width: 4in;
+      height: 6in;
+      margin: 0;
+      align-items: center;
+      justify-content: center;
+    }
+    /* Zero margin, filling the full page — desktop's print-to-PDF/driver
+       path is literal about honoring @page { margin: 0 }, unlike the
+       mobile print pipelines this used to have to work around (see
+       ARCHITECTURE.md; that workaround no longer applies now that mobile
+       is routed through the share sheet instead of this CSS entirely). */
+    .print-sheet img {
+      width: 4in;
+      height: 6in;
+      object-fit: contain;
+    }
+    /* body's own padding/background still apply otherwise (it isn't hidden,
+       only its children are) and would push #printSheet off the page edges
+       or waste part of the 4x6" sheet. body::before (the curtain texture) is
+       a pseudo-element, not a DOM child, so the `>*` rule above doesn't
+       catch it either — hide it explicitly. */
+    body {
+      padding: 0;
+      background: #fff;
+    }
+    body::before {
+      display: none;
+    }
+    /* Belt-and-suspenders: some mobile WebKit versions render a <video>
+       with a live camera stream via a separate hardware-compositing layer
+       that doesn't reliably respect display:none inherited from an
+       ancestor during print — it can show through as a solid-color block
+       on top of the print output. Target it directly, in addition to
+       actually detaching the stream in JS (see beforeprint/afterprint). */
+    video {
+      display: none !important;
+    }
+  }
 </style>
 </head>
 <body>
@@ -569,9 +628,9 @@
   </div>
 
   <canvas id="workCanvas" style="display:none;"></canvas>
+  <div class="print-sheet" id="printSheet"></div>
 
 <script src="qrcode.min.js"></script>
-<script src="jspdf.umd.min.js"></script>
 <script>
 const video = document.getElementById('video');
 const flipCameraBtn = document.getElementById('flipCameraBtn');
@@ -588,6 +647,7 @@ const permHint = document.getElementById('permHint');
 const saveBtn = document.getElementById('saveBtn');
 const shareBtn = document.getElementById('shareBtn');
 const printBtn = document.getElementById('printBtn');
+const printSheet = document.getElementById('printSheet');
 const againBtn = document.getElementById('againBtn');
 
 const siteThemeSelect = document.getElementById('siteThemeSelect');
@@ -1168,73 +1228,76 @@ saveBtn.addEventListener('click', () => {
   });
 });
 
-// "Print" generates a real, standalone PDF file instead of using
-// window.print() on the live page. window.print() (even choosing "Save as
-// PDF" as its destination) still goes through the browser's "print this
-// webpage" pipeline, which unavoidably injects its own header/footer (URL,
-// date, page count) and its own unprintable margins — neither controllable
-// from CSS/JS, as the earlier print-formatting fixes in this file's history
-// ran into repeatedly. Building the PDF ourselves with jsPDF sidesteps that
-// pipeline entirely: the visitor downloads a real PDF with only our content
-// in it, and prints it later from a PDF viewer (Preview, Acrobat, their
-// phone's Files app, etc.), which doesn't carry any of that webpage-print
-// baggage.
-function buildPrintPdf(printCanvas) {
-  const dataUrl = printCanvas.toDataURL('image/png');
-
-  const PAGE_W_IN = 4, PAGE_H_IN = 6;
-  const MARGIN_IN = 0.2; // matches the safety margin the old print CSS used
-  const maxW = PAGE_W_IN - MARGIN_IN * 2;
-  const maxH = PAGE_H_IN - MARGIN_IN * 2;
-  const imgAspect = printCanvas.width / printCanvas.height;
-  let drawW = maxW, drawH = maxW / imgAspect;
-  if (drawH > maxH) { drawH = maxH; drawW = maxH * imgAspect; }
-  const x = (PAGE_W_IN - drawW) / 2;
-  const y = (PAGE_H_IN - drawH) / 2;
-
-  const { jsPDF } = window.jspdf;
-  const doc = new jsPDF({ unit: 'in', format: [PAGE_W_IN, PAGE_H_IN], orientation: 'portrait' });
-  doc.addImage(dataUrl, 'PNG', x, y, drawW, drawH);
-  return doc;
+// "Print" is split by platform rather than using one universal mechanism:
+// mobile shares a plain PNG (native photo-print pipeline, handles
+// borderless printing well); desktop uses window.print() via @media print
+// CSS (the browser's own print-to-PDF/driver path is literal about
+// honoring @page { margin: 0 }, so this fills the page with no injected
+// header/footer). See ARCHITECTURE.md "Print layout" for the fuller
+// history of why this ended up split this way rather than one approach
+// used everywhere.
+function canvasToPngFile(canvas, filename) {
+  return new Promise(resolve => {
+    canvas.toBlob(blob => resolve(new File([blob], filename, { type: 'image/png' })), 'image/png');
+  });
 }
 
 printBtn.addEventListener('click', async () => {
-  // Open a blank window synchronously, still inside this click's user
-  // gesture — most browsers only allow window.open() without popup-blocking
-  // when it's called directly from an event handler, not after an `await`.
-  // We navigate this window to the real PDF once it's built below.
-  const printWindow = window.open('', '_blank');
-
   const printCanvas = await buildPrintCanvas();
-  const doc = buildPrintPdf(printCanvas);
-  const blobUrl = doc.output('bloburl');
 
-  if (!printWindow) {
-    // Popup blocked despite opening synchronously (some browsers/extensions
-    // block regardless) — fall back to a plain download so the visitor
-    // still gets the PDF somehow.
-    doc.save(`portabooth-${Date.now()}.pdf`);
+  if (canShareFiles()) {
+    // Mobile: route through the native share sheet, the same mechanism as
+    // shareBtn. Most share sheets (iOS, many Android ones) offer a "Print"
+    // action directly for a shared image — this hits the OS's native
+    // *photo*-print pipeline, not the "print this webpage" pipeline
+    // window.print() uses, which handles borderless printing far more
+    // gracefully (it's literally the pipeline these portable photo
+    // printers are designed around). canShareFiles() already gates on
+    // isMobileDevice(), so this only applies there, not on desktop
+    // browsers that happen to also implement navigator.share.
+    const file = await canvasToPngFile(printCanvas, `portabooth-${Date.now()}.png`);
+    try {
+      await navigator.share({ files: [file] });
+    } catch (e) { /* user cancelled, or share failed — nothing more to do */ }
     return;
   }
 
-  // Attach the load listener BEFORE navigating, so there's no race where
-  // the (same-origin, since blob: URLs inherit the opener's origin) load
-  // event could fire before we're listening for it. Once the browser's
-  // native PDF viewer has rendered the file, trigger its print flow
-  // directly -- this prints the PDF document itself (no injected webpage
-  // header/footer, since nothing here is "printing a webpage").
-  // No artificial delay here on purpose: on desktop this is a well-
-  // established pattern that generally works fine calling print()
-  // immediately on load. On mobile (iOS Safari especially), gesture-
-  // requiring APIs like print() are tied to a "user activation" that can
-  // expire quickly and may not survive async work at all -- waiting
-  // *longer* after the original click only reduces the odds it still
-  // counts, so print() is called as soon as possible rather than after a
-  // deliberate pause.
-  printWindow.addEventListener('load', () => {
-    printWindow.print();
-  });
-  printWindow.location.href = blobUrl;
+  // Desktop (or mobile without share support): use the browser's own print
+  // pipeline via @media print CSS — see that CSS block for why this is
+  // desktop's path rather than the same share-sheet route as mobile.
+  const dataUrl = printCanvas.toDataURL('image/png');
+  printSheet.innerHTML = '';
+  const img = document.createElement('img');
+  img.src = dataUrl;
+  printSheet.appendChild(img);
+  // Setting img.src doesn't mean the image has actually decoded/painted yet
+  // — calling window.print() immediately can capture the page before that
+  // happens, showing a correctly-sized but empty box until the user cancels
+  // and reprints. Wait for it to actually be ready first.
+  await (img.decode ? img.decode().catch(() => {}) : new Promise(resolve => {
+    if (img.complete) resolve();
+    else { img.onload = resolve; img.onerror = resolve; }
+  }));
+  window.print();
+});
+
+// Actually detach the live camera stream during printing, not just hide the
+// <video> via CSS — some mobile WebKit versions render a video element with
+// an active stream through a separate hardware-compositing layer that can
+// show through the print output as a solid-color block even when its
+// ancestors are display:none. Reattaching afterprint resumes the same
+// stream (no new getUserMedia prompt). beforeprint/afterprint fire whether
+// the visitor actually prints or cancels the dialog. (In practice this
+// desktop-only print path rarely has a live camera stream running by the
+// time a strip exists, but it's cheap insurance.)
+window.addEventListener('beforeprint', () => {
+  if (video.srcObject) video.srcObject = null;
+});
+window.addEventListener('afterprint', () => {
+  if (stream && !video.srcObject) {
+    video.srcObject = stream;
+    video.play().catch(() => {});
+  }
 });
 
 if (navigator.canShare) {
