@@ -1101,6 +1101,10 @@ function stripDimensions() {
   return { stripW, photosH, stripH, layout };
 }
 
+// Used for the on-screen preview and for Save/Share — deliberately has NO
+// cut-guide border. The dashed border only makes sense on the print
+// formatting (buildPrintCanvas(), two strips meant to be cut apart) — a
+// single saved/shared image isn't going to be trimmed out of anything.
 async function buildStrip() {
   await loadCaptionFonts();
   const { stripW, photosH, stripH, layout } = stripDimensions();
@@ -1111,16 +1115,6 @@ async function buildStrip() {
   // The strip is always plain white/dark ink — kept the same regardless of
   // site theme so a printed strip looks like a real photobooth strip.
   drawStripContent(ctx, 0, stripW, photosH, layout);
-
-  // Cut guidelines: a light dashed border at the true edge of the exported
-  // image so it can be trimmed to size after printing, like a real strip.
-  ctx.save();
-  ctx.strokeStyle = '#d0d0d0';
-  ctx.lineWidth = 1;
-  ctx.setLineDash([6, 5]);
-  const inset = 5;
-  ctx.strokeRect(inset, inset, stripW - inset * 2, stripH - inset * 2);
-  ctx.restore();
 }
 
 // Two copies of the strip side by side for printing, sharing ONE outer
