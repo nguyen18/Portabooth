@@ -674,6 +674,10 @@ const FRAME_W = 500;   // px per photo cell at capture resolution
 const FRAME_H = 375;   // 4:3
 const PADDING = 30;
 const GAP = 14;
+// Each photo is drawn at this fraction of its cell (both dimensions scaled
+// equally, so the diagonal shrinks by the same percentage), centered within
+// it — see drawStripContent().
+const PHOTO_SCALE = 0.99;
 
 // The strip itself always prints on plain white paper with dark ink, regardless
 // of the site theme — only the surrounding website chrome follows the theme.
@@ -1065,14 +1069,25 @@ function drawStripContent(ctx, offsetX, stripW, photosH, layout) {
   ctx.fillStyle = STRIP_PAPER;
   ctx.fillRect(offsetX, 0, stripW, stripH);
 
+  // Each photo is drawn slightly smaller than its cell (PHOTO_SCALE, both
+  // dimensions scaled equally so the diagonal shrinks by the same
+  // percentage) and centered within it — a subtle paper-colored border
+  // around each individual photo, distinct from the strip's own outer
+  // margin/border.
+  const drawW = FRAME_W * PHOTO_SCALE;
+  const drawH = FRAME_H * PHOTO_SCALE;
+  const cellInsetX = (FRAME_W - drawW) / 2;
+  const cellInsetY = (FRAME_H - drawH) / 2;
   shots.forEach((shotCanvas, i) => {
-    const y = PADDING + i * (FRAME_H + GAP);
-    const x = offsetX + PADDING;
-    ctx.drawImage(shotCanvas, x, y, FRAME_W, FRAME_H);
-    applyPixelFilterMatrix(ctx, x, y, FRAME_W, FRAME_H, FILTER_MATRICES[photoFilter]);
+    const cellY = PADDING + i * (FRAME_H + GAP);
+    const cellX = offsetX + PADDING;
+    const x = cellX + cellInsetX;
+    const y = cellY + cellInsetY;
+    ctx.drawImage(shotCanvas, x, y, drawW, drawH);
+    applyPixelFilterMatrix(ctx, x, y, drawW, drawH, FILTER_MATRICES[photoFilter]);
     ctx.strokeStyle = 'rgba(0,0,0,0.15)';
     ctx.lineWidth = 1;
-    ctx.strokeRect(x, y, FRAME_W, FRAME_H);
+    ctx.strokeRect(x, y, drawW, drawH);
   });
 
   drawCaptionLines(ctx, offsetX + stripW / 2, PADDING + photosH, layout);
