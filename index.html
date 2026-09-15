@@ -685,8 +685,14 @@ const PHOTO_SCALE = 0.99;
 // divider and is untouched by these. Measured as the literal gap from each
 // dashed line to the two-strip block's own edge in that direction.
 const PRINT_TOP_MARGIN = 40;
-const PRINT_SIDE_MARGIN = 20;    // outer left/right only, not the middle divider
-const PRINT_BOTTOM_MARGIN = 40;  // below the caption/date area
+const PRINT_SIDE_MARGIN = 15;    // outer left/right only, not the middle divider
+const PRINT_BOTTOM_MARGIN = 32;  // below the caption/date area
+
+// buildPrintCanvas() only: grows the two-strip block ~1% larger in both
+// dimensions (so the diagonal grows by the same percentage), drawn from the
+// same PRINT_SIDE_MARGIN/PRINT_TOP_MARGIN inset — the extra size pushes the
+// block outward toward the dashed border instead of adding blank canvas.
+const PRINT_IMAGE_SCALE = 1.01;
 
 // The strip itself always prints on plain white paper with dark ink, regardless
 // of the site theme — only the surrounding website chrome follows the theme.
@@ -1136,8 +1142,8 @@ async function buildPrintCanvas() {
   const { stripW, photosH, stripH, layout } = stripDimensions();
   const inset = 5; // canvas edge -> dashed border line, unrelated to the margins below
 
-  const coreWidth = stripW * 2;
-  const coreHeight = stripH;
+  const coreWidth = stripW * 2 * PRINT_IMAGE_SCALE;
+  const coreHeight = stripH * PRINT_IMAGE_SCALE;
   const canvas = document.createElement('canvas');
   canvas.width = coreWidth + PRINT_SIDE_MARGIN * 2 + inset * 2;
   canvas.height = coreHeight + PRINT_TOP_MARGIN + PRINT_BOTTOM_MARGIN + inset * 2;
@@ -1150,17 +1156,25 @@ async function buildPrintCanvas() {
   ctx.fillRect(0, 0, canvas.width, canvas.height);
 
   // Shift the two-strip block so it sits exactly PRINT_TOP_MARGIN /
-  // PRINT_SIDE_MARGIN away from the dashed border on those sides — a
-  // translate() rather than passing more offsets into drawStripContent(),
-  // so that shared function (also used by buildStrip(), unaffected by any
-  // of this) doesn't need to know about print-specific margins at all.
+  // PRINT_SIDE_MARGIN away from the dashed border on those sides, then scale
+  // it up by PRINT_IMAGE_SCALE around that same top-left corner — a
+  // translate()+scale() rather than passing more parameters into
+  // drawStripContent(), so that shared function (also used by buildStrip(),
+  // unaffected by any of this) doesn't need to know about print-specific
+  // sizing at all.
   const coreOffsetX = inset + PRINT_SIDE_MARGIN;
   const coreOffsetY = inset + PRINT_TOP_MARGIN;
   ctx.save();
   ctx.translate(coreOffsetX, coreOffsetY);
+  ctx.scale(PRINT_IMAGE_SCALE, PRINT_IMAGE_SCALE);
   drawStripContent(ctx, 0, stripW, photosH, layout);
   drawStripContent(ctx, stripW, stripW, photosH, layout);
   ctx.restore();
+
+  // The scaled width of a single (post-PRINT_IMAGE_SCALE) strip, in final
+  // canvas pixels — where the middle divider line actually falls now that
+  // the block is drawn larger than stripW.
+  const scaledStripW = stripW * PRINT_IMAGE_SCALE;
 
   ctx.save();
   ctx.strokeStyle = '#d0d0d0';
@@ -1168,8 +1182,8 @@ async function buildPrintCanvas() {
   ctx.setLineDash([6, 5]);
   ctx.strokeRect(inset, inset, canvas.width - inset * 2, canvas.height - inset * 2);
   ctx.beginPath();
-  ctx.moveTo(coreOffsetX + stripW, inset);
-  ctx.lineTo(coreOffsetX + stripW, canvas.height - inset);
+  ctx.moveTo(coreOffsetX + scaledStripW, inset);
+  ctx.lineTo(coreOffsetX + scaledStripW, canvas.height - inset);
   ctx.stroke();
   ctx.restore();
 
