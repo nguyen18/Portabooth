@@ -679,6 +679,15 @@ const GAP = 14;
 // it — see drawStripContent().
 const PHOTO_SCALE = 0.99;
 
+// Extra margins between the dashed border and the two-strip block on the
+// print formatting ONLY (buildPrintCanvas()) — distinct from PADDING, which
+// governs spacing within each individual strip and at the shared middle
+// divider and is untouched by these. Measured as the literal gap from each
+// dashed line to the two-strip block's own edge in that direction.
+const PRINT_TOP_MARGIN = 40;
+const PRINT_SIDE_MARGIN = 30;    // outer left/right only, not the middle divider
+const PRINT_BOTTOM_MARGIN = 40;  // below the caption/date area
+
 // The strip itself always prints on plain white paper with dark ink, regardless
 // of the site theme — only the surrounding website chrome follows the theme.
 const STRIP_PAPER = '#ffffff';
@@ -1125,23 +1134,42 @@ async function buildStrip() {
 async function buildPrintCanvas() {
   await loadCaptionFonts();
   const { stripW, photosH, stripH, layout } = stripDimensions();
+  const inset = 5; // canvas edge -> dashed border line, unrelated to the margins below
+
+  const coreWidth = stripW * 2;
+  const coreHeight = stripH;
   const canvas = document.createElement('canvas');
-  canvas.width = stripW * 2;
-  canvas.height = stripH;
+  canvas.width = coreWidth + PRINT_SIDE_MARGIN * 2 + inset * 2;
+  canvas.height = coreHeight + PRINT_TOP_MARGIN + PRINT_BOTTOM_MARGIN + inset * 2;
   const ctx = canvas.getContext('2d');
 
+  // Fill the whole canvas first — drawStripContent() only paints its own
+  // stripW-wide region, so without this the new margin areas added below
+  // would be left transparent instead of matching paper white.
+  ctx.fillStyle = STRIP_PAPER;
+  ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+  // Shift the two-strip block so it sits exactly PRINT_TOP_MARGIN /
+  // PRINT_SIDE_MARGIN away from the dashed border on those sides — a
+  // translate() rather than passing more offsets into drawStripContent(),
+  // so that shared function (also used by buildStrip(), unaffected by any
+  // of this) doesn't need to know about print-specific margins at all.
+  const coreOffsetX = inset + PRINT_SIDE_MARGIN;
+  const coreOffsetY = inset + PRINT_TOP_MARGIN;
+  ctx.save();
+  ctx.translate(coreOffsetX, coreOffsetY);
   drawStripContent(ctx, 0, stripW, photosH, layout);
   drawStripContent(ctx, stripW, stripW, photosH, layout);
+  ctx.restore();
 
   ctx.save();
   ctx.strokeStyle = '#d0d0d0';
   ctx.lineWidth = 1;
   ctx.setLineDash([6, 5]);
-  const inset = 5;
-  ctx.strokeRect(inset, inset, canvas.width - inset * 2, stripH - inset * 2);
+  ctx.strokeRect(inset, inset, canvas.width - inset * 2, canvas.height - inset * 2);
   ctx.beginPath();
-  ctx.moveTo(stripW, inset);
-  ctx.lineTo(stripW, stripH - inset);
+  ctx.moveTo(coreOffsetX + stripW, inset);
+  ctx.lineTo(coreOffsetX + stripW, canvas.height - inset);
   ctx.stroke();
   ctx.restore();
 
