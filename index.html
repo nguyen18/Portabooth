@@ -684,9 +684,28 @@ const PHOTO_SCALE = 0.99;
 // governs spacing within each individual strip and at the shared middle
 // divider and is untouched by these. Measured as the literal gap from each
 // dashed line to the two-strip block's own edge in that direction.
+//
+// PRINT_SIDE_MARGIN is a fixed, load-bearing safety margin (the "outer
+// dashed border" must stay this far from the print PNG's own edge). The top
+// and bottom margins are NOT fixed at print time — buildPrintCanvas() grows
+// them to whatever's needed to make the exported PNG exactly PRINT_PAGE_W_IN
+// x PRINT_PAGE_H_IN in aspect ratio. PRINT_TOP_MARGIN/PRINT_BOTTOM_MARGIN
+// below are only the floor that computed value can't go under (in practice
+// it never gets close, since SHOT_COUNT is fixed at 4).
 const PRINT_TOP_MARGIN = 40;
 const PRINT_SIDE_MARGIN = 20;    // outer left/right only, not the middle divider
 const PRINT_BOTTOM_MARGIN = 40;  // below the caption/date area
+
+// Must match the physical page size in the @media print CSS (`@page` and
+// `.print-sheet`/`.print-sheet img`) — that's what determines the target
+// aspect ratio below. If the printed PNG's own aspect ratio doesn't exactly
+// match the page's, `object-fit: contain` on `.print-sheet img` letterboxes
+// it, leaving an extra, uncontrolled gap between the dashed border and the
+// true paper edge on top of the margins above — see "Print layout" in
+// ARCHITECTURE.md.
+const PRINT_PAGE_W_IN = 4;
+const PRINT_PAGE_H_IN = 6;
+const PRINT_PAGE_ASPECT = PRINT_PAGE_W_IN / PRINT_PAGE_H_IN;
 
 // The strip itself always prints on plain white paper with dark ink, regardless
 // of the site theme — only the surrounding website chrome follows the theme.
@@ -1136,11 +1155,33 @@ async function buildPrintCanvas() {
   const { stripW, photosH, stripH, layout } = stripDimensions();
   const inset = 5; // canvas edge -> dashed border line, unrelated to the margins below
 
-  const coreWidth = stripW * 2;
-  const coreHeight = stripH;
+  // Each strip's own photos/caption already sit centered within stripW (see
+  // drawStripContent()/stripDimensions()) — PADDING on both sides. Without a
+  // gutter here, the right strip's left edge (and the left strip's right
+  // edge) would butt directly against the middle cut line with only that
+  // bare PADDING between it and the photos, while the two outer edges get
+  // PADDING *plus* PRINT_SIDE_MARGIN before reaching the dashed border. That
+  // mismatch is what made each strip look off-center relative to the cut
+  // line versus the sheet's outer edge. Inserting a gutter here — the same
+  // width as twice the outer margin, split evenly by the dashed line —
+  // gives the middle line the same PRINT_SIDE_MARGIN of breathing room on
+  // each side that the outer border already gets, so every strip has equal
+  // margin on both of its sides.
+  const middleGutter = PRINT_SIDE_MARGIN * 2;
+
+  const coreWidth = stripW * 2 + middleGutter;
   const canvas = document.createElement('canvas');
   canvas.width = coreWidth + PRINT_SIDE_MARGIN * 2 + inset * 2;
-  canvas.height = coreHeight + PRINT_TOP_MARGIN + PRINT_BOTTOM_MARGIN + inset * 2;
+  // Height is derived from the width and PRINT_PAGE_ASPECT, NOT from a fixed
+  // top/bottom margin — that's what guarantees this canvas's own aspect
+  // ratio always exactly matches the physical page, so the <img> that
+  // eventually shows it (object-fit: contain, forced to PRINT_PAGE_W_IN x
+  // PRINT_PAGE_H_IN — see that CSS) never has to letterbox it. Any
+  // letterboxing there would show up as extra blank paper between our own
+  // dashed border and the true page edge, on top of the margins we already
+  // draw — seen as "gaping" beyond the dashed border. See "Print layout" in
+  // ARCHITECTURE.md.
+  canvas.height = Math.round(canvas.width / PRINT_PAGE_ASPECT);
   const ctx = canvas.getContext('2d');
 
   // Fill the whole canvas first — drawStripContent() only paints its own
@@ -1149,17 +1190,25 @@ async function buildPrintCanvas() {
   ctx.fillStyle = STRIP_PAPER;
   ctx.fillRect(0, 0, canvas.width, canvas.height);
 
-  // Shift the two-strip block so it sits exactly PRINT_TOP_MARGIN /
+  // Whatever vertical room is left over after the core content and PRINT_
+  // SIDE_MARGIN-driven width become the top/bottom margins, split evenly —
+  // always comfortably above the PRINT_TOP_MARGIN/PRINT_BOTTOM_MARGIN floor
+  // in practice, since SHOT_COUNT (and so stripH) is fixed. This is what
+  // absorbs the width/height mismatch instead of leaving it as uncontrolled
+  // letterboxing outside the dashed border.
+  const verticalMargin = Math.max(PRINT_TOP_MARGIN, (canvas.height - stripH - inset * 2) / 2);
+
+  // Shift the two-strip block so it sits exactly verticalMargin /
   // PRINT_SIDE_MARGIN away from the dashed border on those sides — a
   // translate() rather than passing more offsets into drawStripContent(),
   // so that shared function (also used by buildStrip(), unaffected by any
   // of this) doesn't need to know about print-specific margins at all.
   const coreOffsetX = inset + PRINT_SIDE_MARGIN;
-  const coreOffsetY = inset + PRINT_TOP_MARGIN;
+  const coreOffsetY = inset + verticalMargin;
   ctx.save();
   ctx.translate(coreOffsetX, coreOffsetY);
   drawStripContent(ctx, 0, stripW, photosH, layout);
-  drawStripContent(ctx, stripW, stripW, photosH, layout);
+  drawStripContent(ctx, stripW + middleGutter, stripW, photosH, layout);
   ctx.restore();
 
   ctx.save();
@@ -1168,8 +1217,9 @@ async function buildPrintCanvas() {
   ctx.setLineDash([6, 5]);
   ctx.strokeRect(inset, inset, canvas.width - inset * 2, canvas.height - inset * 2);
   ctx.beginPath();
-  ctx.moveTo(coreOffsetX + stripW, inset);
-  ctx.lineTo(coreOffsetX + stripW, canvas.height - inset);
+  const middleLineX = coreOffsetX + stripW + middleGutter / 2;
+  ctx.moveTo(middleLineX, inset);
+  ctx.lineTo(middleLineX, canvas.height - inset);
   ctx.stroke();
   ctx.restore();
 
