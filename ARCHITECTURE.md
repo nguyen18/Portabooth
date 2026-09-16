@@ -10,7 +10,8 @@ A browser-based photobooth ("Portabooth" — formerly named "Snapstrip" in-app; 
 
 ## Current state
 
-- `index.html` — the entire application: markup, CSS, and JS in one file (~590 lines). Named `index.html` (renamed from `photobooth.html` 2026-09-14) so GitHub Pages serves it as the site root.
+- `index.html` — markup and JS (a single `<script>` block); CSS lives in `style.css`, linked via `<link rel="stylesheet">` (split out 2026-09-16 — see "Working conventions" below for why JS stayed inline). Named `index.html` (renamed from `photobooth.html` 2026-09-14) so GitHub Pages serves it as the site root.
+- `style.css` — all page styling (site themes, layout, print CSS), previously an inline `<style>` block in `index.html`.
 - `CNAME` — custom domain (`portabooth.studio`) for GitHub Pages.
 - `qrcode.min.js` — vendored third-party QR code generator (davidshimjs/qrcodejs, MIT), loaded via a local `<script src>` tag. See "Custom template sharing" below for why it's vendored instead of a CDN `<script>` tag.
 - `fonts/Unna-{Regular,Bold,Italic,BoldItalic}.ttf` — vendored Unna typeface (SIL Open Font License, `fonts/Unna-OFL.txt`), used for the caption/date drawn onto the exported strip. Vendored for the same reason as the QR library: no third-party dependency at runtime.
@@ -35,7 +36,7 @@ Deliberate choice, not a placeholder: [conversation with the project owner](.) c
 - `#workCanvas` — declared but currently **unused / dead** (see Known issues below).
 
 ### Styling
-Single `<style>` block. Two independent color systems, which was a point of real confusion during development and is worth keeping straight:
+`style.css` (linked from `<head>`, not inline — see "Current state" above). Two independent color systems, which was a point of real confusion during development and is worth keeping straight:
 - **Site theme** — CSS custom properties for the "velvet curtain photobooth" *page chrome* (`--curtain`, `--bulb`, `--brass`, etc.), defined on `:root` and overridden via `:root[data-theme="noir|blush|mint|sanrio"]`. Controlled by the "Site theme" select. Does **not** affect the exported strip. `sanrio` is an original pastel-pink/kawaii-coded palette (raspberry curtain, near-white bow-colored glow) — not any actual Sanrio artwork, logo, or character, which would be a licensing issue; it's a color theme "in that vein," same as how `blush`/`mint` aren't tied to a specific brand.
 - **Strip appearance** — always plain white paper with dark ink (`STRIP_PAPER`/`STRIP_INK` constants in JS), regardless of site theme, so a printed strip always looks like a real photobooth strip. `.strip-frame` background is hardcoded `#ffffff` for the same reason.
 
@@ -168,12 +169,12 @@ Not pursued for now: the output format tradeoff was the sticking point. `MediaRe
 
 ## If this grows
 
-Reach for a framework/build step only if the project actually grows beyond a single screen — e.g. a gallery of past strips, multiple routes, or shared state across views. (A settings/theme picker alone did *not* require this — see "Custom template sharing" above, done with plain URL-encoded state.) A lighter first step than full React would be Vite + vanilla TS to get a dev server and type-checking without adopting a component framework. Until then, keep it a single static file (plus small vendored dependencies where justified) — it keeps load time minimal, which matters more than usual here since it's a mobile-first camera app.
+Reach for a framework/build step only if the project actually grows beyond a single screen — e.g. a gallery of past strips, multiple routes, or shared state across views. (A settings/theme picker alone did *not* require this — see "Custom template sharing" above, done with plain URL-encoded state.) A lighter first step than full React would be Vite + vanilla TS to get a dev server and type-checking without adopting a component framework. Until then, keep it plain static files (plus small vendored dependencies where justified) — it keeps load time minimal, which matters more than usual here since it's a mobile-first camera app.
 
 If arbitrary custom frame *image* uploads become a requirement, that's the point where minimal serverless storage (no login, just an upload endpoint + object storage + short-ID lookup) becomes the right next step — see "Custom template sharing" above for the fuller tradeoff.
 
 ## Working conventions for this repo
 
-- Keep it a single static HTML file unless there's a concrete reason to split it (see "If this grows").
+- Keep it plain static files (`index.html` + `style.css` + inline JS) unless there's a concrete reason to split further (see "If this grows"). CSS was split out of `index.html` into `style.css` (2026-09-16, at the project owner's request) — a plain `<link rel="stylesheet">`, no build step, and confirmed to still load correctly both over HTTP and directly via `file://` (Playwright-verified both ways). JS stayed as a single inline `<script>` block since only the CSS split was requested.
 - No build step should be introduced without discussing it first — the zero-dependency, drop-in-a-static-host nature of this repo is a deliberate feature, not an oversight.
 - When editing capture/compositing logic (`captureFrame`, `buildStrip`), test on an actual mobile browser (iOS Safari in particular) — front-camera aspect ratios and `playsinline` behavior vary more there than on desktop webcams.

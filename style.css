@@ -1,0 +1,499 @@
+@font-face {
+  font-family: 'Unna';
+  src: url('fonts/Unna-Regular.ttf') format('truetype');
+  font-weight: 400;
+  font-style: normal;
+}
+@font-face {
+  font-family: 'Unna';
+  src: url('fonts/Unna-Bold.ttf') format('truetype');
+  font-weight: 700;
+  font-style: normal;
+}
+@font-face {
+  font-family: 'Unna';
+  src: url('fonts/Unna-Italic.ttf') format('truetype');
+  font-weight: 400;
+  font-style: italic;
+}
+@font-face {
+  font-family: 'Unna';
+  src: url('fonts/Unna-BoldItalic.ttf') format('truetype');
+  font-weight: 700;
+  font-style: italic;
+}
+
+:root {
+  --curtain: #2b1518;
+  --curtain-dark: #1a0d0f;
+  --bulb: #ffd76a;
+  --bulb-glow: #ffb347;
+  --paper: #f5efe3;
+  --ink: #241412;
+  --brass: #b9863f;
+  --brass-dark: #8a611f;
+}
+
+:root[data-theme="noir"] {
+  --curtain: #141414;
+  --curtain-dark: #000000;
+  --bulb: #f2f2f2;
+  --bulb-glow: #cfcfcf;
+  --paper: #ffffff;
+  --ink: #141414;
+  --brass: #8a8a8a;
+  --brass-dark: #4d4d4d;
+}
+
+:root[data-theme="blush"] {
+  --curtain: #4a1f2b;
+  --curtain-dark: #2e1019;
+  --bulb: #ffd1dc;
+  --bulb-glow: #ff9eb5;
+  --paper: #fff5f7;
+  --ink: #5c1a2e;
+  --brass: #d68fa1;
+  --brass-dark: #a85c73;
+}
+
+:root[data-theme="mint"] {
+  --curtain: #123c34;
+  --curtain-dark: #0a2620;
+  --bulb: #d7fff0;
+  --bulb-glow: #8fe9c9;
+  --paper: #f2fbf7;
+  --ink: #123c34;
+  --brass: #6fbfa0;
+  --brass-dark: #3f8a6d;
+}
+
+* { box-sizing: border-box; }
+
+html, body {
+  margin: 0;
+  min-height: 100%;
+  background:
+    radial-gradient(ellipse at top, #3a1c20 0%, var(--curtain) 45%, var(--curtain-dark) 100%);
+  font-family: 'Georgia', 'Times New Roman', serif;
+  color: var(--paper);
+}
+
+body {
+  padding: 24px 16px 60px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 20px;
+}
+
+/* velvet curtain texture stripes */
+body::before {
+  content: "";
+  position: fixed;
+  inset: 0;
+  background: repeating-linear-gradient(
+    90deg,
+    rgba(0,0,0,0.12) 0px,
+    rgba(0,0,0,0.12) 14px,
+    rgba(255,255,255,0.02) 14px,
+    rgba(255,255,255,0.02) 28px
+  );
+  pointer-events: none;
+  z-index: 0;
+}
+
+header {
+  position: relative;
+  z-index: 1;
+  text-align: center;
+}
+
+header h1 {
+  font-family: 'Georgia', serif;
+  font-style: italic;
+  font-weight: 400;
+  font-size: 2.1rem;
+  margin: 0;
+  letter-spacing: 0.5px;
+  color: var(--bulb);
+  text-shadow: 0 0 18px rgba(255, 183, 71, 0.45);
+}
+
+header p {
+  margin: 6px 0 0;
+  font-size: 0.85rem;
+  color: #d8c3ae;
+  font-style: italic;
+}
+
+.template-note {
+  position: relative;
+  z-index: 1;
+  font-size: 0.75rem;
+  font-style: italic;
+  color: var(--bulb);
+  text-align: center;
+  margin: -12px 0 0;
+}
+
+.customize {
+  position: relative;
+  z-index: 1;
+  width: 100%;
+  max-width: 420px;
+  background: linear-gradient(180deg, #3d2226, #241315);
+  border: 2px solid var(--brass-dark);
+  border-radius: 6px;
+  padding: 4px 16px 16px;
+  color: var(--paper);
+}
+
+.customize summary {
+  cursor: pointer;
+  padding: 12px 0;
+  font-family: 'Georgia', serif;
+  font-style: italic;
+  color: var(--bulb);
+  list-style: none;
+}
+
+.customize summary::-webkit-details-marker { display: none; }
+.customize summary::before { content: "✦ "; }
+
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin-bottom: 12px;
+  font-size: 0.85rem;
+}
+
+.field-row {
+  display: flex;
+  gap: 10px;
+  width: 100%;
+}
+
+.field-row .field {
+  flex: 1;
+  min-width: 0;
+}
+
+.field select,
+.field input[type="text"] {
+  width: 100%;
+  font-family: 'Georgia', serif;
+  font-size: 0.9rem;
+  padding: 8px 10px;
+  border-radius: 4px;
+  border: 1px solid var(--brass);
+  background: var(--paper);
+  color: var(--ink);
+}
+
+.checkbox-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 0.85rem;
+  margin-bottom: 14px;
+}
+
+.style-toggle-row {
+  display: flex;
+  gap: 16px;
+  margin-bottom: 14px;
+}
+
+.style-toggle-row label {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.85rem;
+}
+
+.share-output {
+  margin-top: 14px;
+  padding-top: 14px;
+  border-top: 1px dashed rgba(255,183,71,0.3);
+  display: none;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+}
+
+.link-row {
+  display: flex;
+  gap: 8px;
+  width: 100%;
+}
+
+.link-row input {
+  flex: 1;
+  min-width: 0;
+  font-size: 0.8rem;
+  padding: 8px 10px;
+  border-radius: 4px;
+  border: 1px solid var(--brass);
+  background: var(--paper);
+  color: var(--ink);
+}
+
+#qrOutput {
+  background: #fff;
+  padding: 10px;
+  border-radius: 4px;
+  line-height: 0;
+}
+
+.caption-preview-frame {
+  background: #ffffff;
+  border-radius: 2px;
+  box-shadow: 0 4px 12px rgba(0,0,0,0.35), 0 0 0 1px rgba(0,0,0,0.08);
+  overflow: hidden;
+}
+
+#captionPreview {
+  display: block;
+  width: 100%;
+  height: auto;
+}
+
+.stage {
+  position: relative;
+  z-index: 1;
+  width: 100%;
+  max-width: 420px;
+  border-radius: 6px;
+  padding: 14px;
+  background: linear-gradient(180deg, #3d2226, #241315);
+  border: 3px solid var(--brass-dark);
+  box-shadow:
+    0 0 0 1px rgba(185, 134, 63, 0.3),
+    inset 0 0 30px rgba(0,0,0,0.55),
+    0 20px 40px rgba(0,0,0,0.5);
+}
+
+.viewfinder {
+  position: relative;
+  width: 100%;
+  aspect-ratio: 4 / 3;
+  background: #000;
+  border-radius: 3px;
+  overflow: hidden;
+  border: 1px solid rgba(185,134,63,0.5);
+}
+
+video, .capture-canvas-preview {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+/* Only mirror the front camera (selfie-style) — the back camera should
+   show a true, unmirrored view like a real camera. */
+video.mirrored {
+  transform: scaleX(-1);
+}
+
+.flip-camera-btn {
+  position: absolute;
+  top: 8px;
+  left: 10px;
+  background: rgba(0,0,0,0.55);
+  color: var(--bulb);
+  border: 1px solid rgba(185,134,63,0.6);
+  border-radius: 50%;
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  font-size: 1rem;
+  line-height: 1;
+  box-shadow: none;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.countdown-overlay {
+  position: absolute;
+  inset: 0;
+  display: none;
+  align-items: center;
+  justify-content: center;
+  font-size: 5rem;
+  font-weight: bold;
+  color: var(--bulb);
+  text-shadow: 0 0 30px rgba(255,183,71,0.8);
+  background: rgba(0,0,0,0.15);
+  font-family: 'Georgia', serif;
+}
+
+.flash {
+  position: absolute;
+  inset: 0;
+  background: white;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.shot-counter {
+  position: absolute;
+  top: 8px;
+  right: 10px;
+  background: rgba(0,0,0,0.55);
+  color: var(--bulb);
+  padding: 3px 10px;
+  border-radius: 20px;
+  font-size: 0.75rem;
+  letter-spacing: 1px;
+  border: 1px solid rgba(185,134,63,0.6);
+}
+
+.controls {
+  display: flex;
+  justify-content: center;
+  gap: 12px;
+  margin-top: 14px;
+}
+
+button {
+  font-family: 'Georgia', serif;
+  font-style: italic;
+  font-size: 0.95rem;
+  padding: 10px 22px;
+  border-radius: 30px;
+  border: 1px solid var(--brass);
+  background: linear-gradient(180deg, #c99a53, var(--brass-dark));
+  color: #2a1608;
+  cursor: pointer;
+  box-shadow: 0 3px 0 rgba(0,0,0,0.35);
+  transition: transform 0.08s ease;
+}
+
+button:active {
+  transform: translateY(2px);
+  box-shadow: 0 1px 0 rgba(0,0,0,0.35);
+}
+
+button:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+
+button.ghost {
+  background: transparent;
+  color: var(--bulb);
+  border: 1px solid rgba(255,183,71,0.5);
+  box-shadow: none;
+}
+
+.strip-wrap {
+  position: relative;
+  z-index: 1;
+  display: none;
+  flex-direction: column;
+  align-items: center;
+  gap: 14px;
+  width: 100%;
+  max-width: 420px;
+}
+
+.strip-frame {
+  /* the strip itself always stays plain white, independent of site theme */
+  background: #ffffff;
+  padding: 14px;
+  border-radius: 2px;
+  box-shadow: 0 10px 30px rgba(0,0,0,0.5), 0 0 0 1px rgba(0,0,0,0.08);
+}
+
+#stripCanvas {
+  display: block;
+  width: 100%;
+  height: auto;
+  border-radius: 1px;
+}
+
+.save-row {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+  justify-content: center;
+}
+
+.hint {
+  font-size: 0.75rem;
+  color: #c9ac8f;
+  text-align: center;
+  max-width: 320px;
+  z-index: 1;
+}
+
+/* Print: two copies of the strip side by side on a 4x6" photo sheet —
+   the standard way a photobooth strip gets printed, cut down the middle.
+   DESKTOP ONLY: on mobile, printBtn routes through the native share
+   sheet instead (see printBtn's click handler) — sharing a plain image
+   hits the OS's photo-print pipeline, not the "print this webpage"
+   pipeline this CSS targets, which handles borderless printing far more
+   gracefully and doesn't get the fixes below at all (it doesn't need
+   them). See ARCHITECTURE.md "Print layout" for the fuller history of
+   why this is split by platform. */
+@page {
+  size: 4in 6in;
+  margin: 0;
+}
+
+.print-sheet {
+  display: none;
+}
+
+@media print {
+  /* visibility:hidden alone isn't enough — hidden elements still occupy
+     layout space, so the browser paginates the entire normal page (which
+     is much taller than a 4x6" sheet) into extra blank pages. display:none
+     actually removes them from the flow, leaving only #printSheet, sized
+     to exactly fill one page. */
+  body > *:not(.print-sheet) {
+    display: none !important;
+  }
+  .print-sheet {
+    display: flex;
+    width: 4in;
+    height: 6in;
+    margin: 0;
+    align-items: center;
+    justify-content: center;
+  }
+  /* Zero margin, filling the full page — desktop's print-to-PDF/driver
+     path is literal about honoring @page { margin: 0 }, unlike the
+     mobile print pipelines this used to have to work around (see
+     ARCHITECTURE.md; that workaround no longer applies now that mobile
+     is routed through the share sheet instead of this CSS entirely). */
+  .print-sheet img {
+    width: 4in;
+    height: 6in;
+    object-fit: contain;
+  }
+  /* body's own padding/background still apply otherwise (it isn't hidden,
+     only its children are) and would push #printSheet off the page edges
+     or waste part of the 4x6" sheet. body::before (the curtain texture) is
+     a pseudo-element, not a DOM child, so the `>*` rule above doesn't
+     catch it either — hide it explicitly. */
+  body {
+    padding: 0;
+    background: #fff;
+  }
+  body::before {
+    display: none;
+  }
+  /* Belt-and-suspenders: some mobile WebKit versions render a <video>
+     with a live camera stream via a separate hardware-compositing layer
+     that doesn't reliably respect display:none inherited from an
+     ancestor during print — it can show through as a solid-color block
+     on top of the print output. Target it directly, in addition to
+     actually detaching the stream in JS (see beforeprint/afterprint). */
+  video {
+    display: none !important;
+  }
+}
