@@ -1231,8 +1231,15 @@ async function runSession() {
   // gesture) — iOS Safari in particular only allows the first play() to
   // succeed if it's called directly inside the gesture handler, not later
   // inside the async countdown/capture loop below (even one `await` away).
-  shutterAudio.play().then(() => shutterAudio.pause()).catch(() => {});
-  shutterAudio.currentTime = 0;
+  // Muted, so this priming play/pause doesn't itself produce an audible
+  // shutter click before any photo is actually taken — only doFlash() (the
+  // real per-shot shutter sound, timed with the flash) should ever be heard.
+  shutterAudio.muted = true;
+  shutterAudio.play().then(() => {
+    shutterAudio.pause();
+    shutterAudio.currentTime = 0;
+    shutterAudio.muted = false;
+  }).catch(() => { shutterAudio.muted = false; });
 
   shots = [];
   startBtn.disabled = true;
