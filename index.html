@@ -589,12 +589,12 @@
       <div class="shot-counter" id="shotCounter">0 / 4</div>
     </div>
     <div class="controls">
-      <button id="startBtn">Start the strip</button>
+      <button id="startBtn">Take Photostrip</button>
       <button id="retakeBtn" class="ghost" style="display:none;">Start over</button>
     </div>
   </div>
 
-  <p class="hint" id="permHint">Tap "Start the strip" and allow camera access. Everything happens on your device — nothing is uploaded anywhere.</p>
+  <p class="hint" id="permHint">Tap "Take Photostrip" and allow camera access. Everything happens on your device — nothing is uploaded anywhere.</p>
 
   <div class="strip-wrap" id="stripWrap">
     <div class="strip-frame">
@@ -1262,7 +1262,7 @@ async function runSession() {
   stripWrap.style.display = 'flex';
   startBtn.disabled = false;
   startBtn.style.display = 'inline-block';
-  startBtn.textContent = 'Start the strip';
+  startBtn.textContent = 'Take Photostrip';
 }
 
 startBtn.addEventListener('click', runSession);
