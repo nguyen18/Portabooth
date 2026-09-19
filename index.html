@@ -85,9 +85,14 @@
   <p class="hint" id="permHint">Tap "Take Photostrip" and allow camera access. Everything happens on your device — nothing is uploaded anywhere.</p>
 
   <div class="strip-wrap" id="stripWrap">
-    <div class="strip-frame">
-      <canvas id="stripCanvas"></canvas>
+    <div class="strip-carousel">
+      <button id="framePrevBtn" class="frame-arrow-btn" aria-label="Previous frame">‹</button>
+      <div class="strip-frame">
+        <canvas id="stripCanvas"></canvas>
+      </div>
+      <button id="frameNextBtn" class="frame-arrow-btn" aria-label="Next frame">›</button>
     </div>
+    <p class="frame-name" id="frameName">Classic</p>
     <div class="field-row">
       <div class="field" id="dateStyleField">
         <label for="dateStyleSelect">Date style</label>
@@ -156,6 +161,9 @@ const captionPreview = document.getElementById('captionPreview');
 const dateStyleField = document.getElementById('dateStyleField');
 const dateStyleSelect = document.getElementById('dateStyleSelect');
 const filterSelect = document.getElementById('filterSelect');
+const framePrevBtn = document.getElementById('framePrevBtn');
+const frameNextBtn = document.getElementById('frameNextBtn');
+const frameNameEl = document.getElementById('frameName');
 
 const SHOT_COUNT = 4;
 const FRAME_W = 500;   // px per photo cell at capture resolution
@@ -258,6 +266,38 @@ function applyPixelFilterMatrix(ctx, x, y, w, h, matrix) {
     data[i + 2] = Math.min(255, Math.max(0, r * matrix[6] + g * matrix[7] + b * matrix[8]));
   }
   ctx.putImageData(imageData, x, y);
+}
+
+// Themed frame overlays — a transparent PNG (same 560x[captionH-dependent]
+// layout as a single strip: see ARCHITECTURE.md "Themed frames") drawn on
+// top of drawStripContent()'s photos/caption, per strip. Cycled with the
+// arrow buttons beside the strip preview (see #framePrevBtn/#frameNextBtn
+// below) rather than a dropdown — an ordered array, not a keyed object, so
+// "next"/"previous" is just frameIndex +/- 1 with wraparound. `classic`
+// (index 0, the default) has `src: null` and draws nothing, leaving today's
+// plain-strip look unchanged. Free, per-viewer choice like
+// photoFilter/dateStyle above — not part of the shared/lockable `config`.
+const FRAMES = [
+  { key: 'classic', label: 'Classic', src: null },
+  { key: 'engagement', label: 'Engagement', src: 'frames/engagement.png' },
+];
+let frameIndex = 0;
+
+// Cached by src so repeated buildStrip()/buildPrintCanvas() calls (every
+// filter/date/frame change re-renders) don't re-fetch the image each time.
+const frameImageCache = {};
+function loadFrameImage() {
+  const src = FRAMES[frameIndex].src;
+  if (!src) return Promise.resolve(null);
+  if (!frameImageCache[src]) {
+    frameImageCache[src] = new Promise((resolve, reject) => {
+      const img = new Image();
+      img.onload = () => resolve(img);
+      img.onerror = reject;
+      img.src = src;
+    });
+  }
+  return frameImageCache[src];
 }
 
 function applySiteTheme(siteTheme) {
@@ -564,12 +604,13 @@ async function renderCaptionPreview() {
   drawCaptionLines(ctx, width / 2, 0, layout);
 }
 
-// Draws one strip's paper background, photos, and caption at the given x
-// offset within ctx — no border. Shared by buildStrip() (a single strip,
-// which draws its own full border after calling this) and
-// buildPrintCanvas() (two strips side by side sharing one outer border and
-// one dividing line, rather than each strip carrying its own).
-function drawStripContent(ctx, offsetX, stripW, photosH, layout) {
+// Draws one strip's paper background, photos, caption, and (if set) the
+// themed frame overlay, at the given x offset within ctx — no cut-guide
+// border. Shared by buildStrip() (a single strip, which draws its own full
+// border after calling this) and buildPrintCanvas() (two strips side by
+// side sharing one outer border and one dividing line, rather than each
+// strip carrying its own).
+function drawStripContent(ctx, offsetX, stripW, photosH, layout, frameImg) {
   const stripH = PADDING * 2 + photosH + layout.captionH;
   ctx.fillStyle = STRIP_PAPER;
   ctx.fillRect(offsetX, 0, stripW, stripH);
@@ -595,6 +636,24 @@ function drawStripContent(ctx, offsetX, stripW, photosH, layout) {
     ctx.strokeRect(x, y, drawW, drawH);
   });
 
+  // Drawn on top of the photos (not the caption yet), so its opaque
+  // decorative art sits over the photo edges and its transparent cutouts
+  // let the photos show through underneath. Scaled to exactly stripW x
+  // stripH — an exact 1:1 match to the frame's own native size (560x1702,
+  // see frames/engagement.png) whenever the caption+date band is at its
+  // default full height; a shorter band (caption or date turned off — see
+  // computeCaptionLayout()) stretches the frame slightly rather than
+  // cropping or leaving a gap, since the frame is a single flat image, not
+  // a 9-slice asset.
+  if (frameImg) {
+    ctx.drawImage(frameImg, offsetX, 0, stripW, stripH);
+  }
+
+  // Caption/date drawn LAST, on top of the frame — frames like
+  // frames/engagement.png paint an opaque background over the whole caption
+  // band (not just decorative accents), so if this were drawn underneath
+  // the frame, the caption/date would be completely hidden behind it. Text
+  // stays legible on top regardless of the frame's own background color.
   drawCaptionLines(ctx, offsetX + stripW / 2, PADDING + photosH, layout);
 }
 
@@ -611,7 +670,7 @@ function stripDimensions() {
 // formatting (buildPrintCanvas(), two strips meant to be cut apart) — a
 // single saved/shared image isn't going to be trimmed out of anything.
 async function buildStrip() {
-  await loadCaptionFonts();
+  const [, frameImg] = await Promise.all([loadCaptionFonts(), loadFrameImage()]);
   const { stripW, photosH, stripH, layout } = stripDimensions();
   stripCanvas.width = stripW;
   stripCanvas.height = stripH;
@@ -619,7 +678,7 @@ async function buildStrip() {
 
   // The strip is always plain white/dark ink — kept the same regardless of
   // site theme so a printed strip looks like a real photobooth strip.
-  drawStripContent(ctx, 0, stripW, photosH, layout);
+  drawStripContent(ctx, 0, stripW, photosH, layout, frameImg);
 }
 
 // Two copies of the strip side by side for printing, sharing ONE outer
@@ -628,7 +687,7 @@ async function buildStrip() {
 // double up into two adjacent lines (plus each strip's own small margin
 // inside its border) right where they meet.
 async function buildPrintCanvas() {
-  await loadCaptionFonts();
+  const [, frameImg] = await Promise.all([loadCaptionFonts(), loadFrameImage()]);
   const { stripW, photosH, stripH, layout } = stripDimensions();
   const inset = 5; // canvas edge -> dashed border line, unrelated to the margins below
 
@@ -672,8 +731,8 @@ async function buildPrintCanvas() {
   // caption) toward its own outer edge — left strip left, right strip right
   // — independent of the equal-margins gutter above. The middle dashed line
   // below is NOT shifted by this; it stays centered in the gutter.
-  drawStripContent(ctx, -PRINT_OUTWARD_NUDGE, stripW, photosH, layout);
-  drawStripContent(ctx, stripW + middleGutter + PRINT_OUTWARD_NUDGE, stripW, photosH, layout);
+  drawStripContent(ctx, -PRINT_OUTWARD_NUDGE, stripW, photosH, layout, frameImg);
+  drawStripContent(ctx, stripW + middleGutter + PRINT_OUTWARD_NUDGE, stripW, photosH, layout, frameImg);
   ctx.restore();
 
   ctx.save();
@@ -907,6 +966,15 @@ filterSelect.addEventListener('change', () => {
   photoFilter = filterSelect.value;
   if (shots.length) buildStrip();
 });
+
+function setFrameIndex(newIndex) {
+  frameIndex = (newIndex + FRAMES.length) % FRAMES.length;
+  frameNameEl.textContent = FRAMES[frameIndex].label;
+  if (shots.length) buildStrip();
+}
+
+framePrevBtn.addEventListener('click', () => setFrameIndex(frameIndex - 1));
+frameNextBtn.addEventListener('click', () => setFrameIndex(frameIndex + 1));
 
 // qrcodejs (vendored in qrcode.min.js) uses a fixed QR "type" (matrix size) per
 // call and throws if the payload doesn't fit — grow the type until it fits

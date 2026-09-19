@@ -400,12 +400,22 @@ button.ghost {
   max-width: 420px;
 }
 
+.strip-carousel {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  width: 100%;
+}
+
 .strip-frame {
   /* the strip itself always stays plain white, independent of site theme */
   background: #ffffff;
   padding: 14px;
   border-radius: 2px;
   box-shadow: 0 10px 30px rgba(0,0,0,0.5), 0 0 0 1px rgba(0,0,0,0.08);
+  flex: 1;
+  min-width: 0;
 }
 
 #stripCanvas {
@@ -413,6 +423,36 @@ button.ghost {
   width: 100%;
   height: auto;
   border-radius: 1px;
+}
+
+.frame-arrow-btn {
+  flex-shrink: 0;
+  background: rgba(0,0,0,0.35);
+  color: var(--bulb);
+  border: 1px solid rgba(185,134,63,0.6);
+  border-radius: 50%;
+  width: 36px;
+  height: 36px;
+  padding: 0;
+  font-size: 1.3rem;
+  line-height: 1;
+  box-shadow: none;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+}
+
+.frame-arrow-btn:active {
+  transform: translateY(1px);
+  box-shadow: none;
+}
+
+.frame-name {
+  font-size: 0.85rem;
+  font-style: italic;
+  color: var(--bulb);
+  text-align: center;
 }
 
 .save-row {
