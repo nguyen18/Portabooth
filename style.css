@@ -409,9 +409,11 @@ button.ghost {
 }
 
 .strip-frame {
-  /* the strip itself always stays plain white, independent of site theme */
+  /* the strip itself always stays plain white, independent of site theme —
+     no padding here, so this box is exactly the printed strip's own edges,
+     not an extra white mat around it. box-shadow still gives it visual
+     separation from the dark page background. */
   background: #ffffff;
-  padding: 14px;
   border-radius: 2px;
   box-shadow: 0 10px 30px rgba(0,0,0,0.5), 0 0 0 1px rgba(0,0,0,0.08);
   flex: 1;
