@@ -400,7 +400,7 @@ button.ghost {
   max-width: 420px;
 }
 
-.strip-carousel {
+.strip-carousel-row {
   display: flex;
   align-items: center;
   justify-content: center;
@@ -408,7 +408,32 @@ button.ghost {
   width: 100%;
 }
 
-.strip-frame {
+/* The swipeable carousel itself: one scroll-snap container holding all of
+   #stripScroller's slide children (one per FRAMES entry, built in JS) side
+   by side. Slides are 76% of the scroller's own width with 12% side
+   padding, so the centered slide's neighbors peek in at the edges — that
+   peek is the point (see the project owner's ask for this layout), not a
+   sizing accident. scroll-snap-type/scroll-padding-inline make swipes (via
+   touch, trackpad, or #framePrevBtn/#frameNextBtn's scrollTo() in JS) settle
+   with a slide centered rather than at an arbitrary scroll offset. */
+.strip-scroller {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  gap: 12px;
+  padding-inline: 12%;
+  overflow-x: auto;
+  scroll-snap-type: x mandatory;
+  scroll-padding-inline: 12%;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: none;
+}
+
+.strip-scroller::-webkit-scrollbar {
+  display: none;
+}
+
+.strip-slide {
   /* the strip itself always stays plain white, independent of site theme —
      no padding here, so this box is exactly the printed strip's own edges,
      not an extra white mat around it. box-shadow still gives it visual
@@ -416,11 +441,11 @@ button.ghost {
   background: #ffffff;
   border-radius: 2px;
   box-shadow: 0 10px 30px rgba(0,0,0,0.5), 0 0 0 1px rgba(0,0,0,0.08);
-  flex: 1;
-  min-width: 0;
+  flex: 0 0 76%;
+  scroll-snap-align: center;
 }
 
-#stripCanvas {
+.strip-slide canvas {
   display: block;
   width: 100%;
   height: auto;

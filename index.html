@@ -85,11 +85,9 @@
   <p class="hint" id="permHint">Tap "Take Photostrip" and allow camera access. Everything happens on your device — nothing is uploaded anywhere.</p>
 
   <div class="strip-wrap" id="stripWrap">
-    <div class="strip-carousel">
+    <div class="strip-carousel-row">
       <button id="framePrevBtn" class="frame-arrow-btn" aria-label="Previous frame">‹</button>
-      <div class="strip-frame">
-        <canvas id="stripCanvas"></canvas>
-      </div>
+      <div class="strip-scroller" id="stripScroller"></div>
       <button id="frameNextBtn" class="frame-arrow-btn" aria-label="Next frame">›</button>
     </div>
     <p class="frame-name" id="frameName">Classic</p>
@@ -134,7 +132,6 @@ const flashEl = document.getElementById('flash');
 const shotCounter = document.getElementById('shotCounter');
 const stage = document.getElementById('stage');
 const stripWrap = document.getElementById('stripWrap');
-const stripCanvas = document.getElementById('stripCanvas');
 const workCanvas = document.getElementById('workCanvas');
 const permHint = document.getElementById('permHint');
 const saveBtn = document.getElementById('saveBtn');
@@ -164,6 +161,7 @@ const filterSelect = document.getElementById('filterSelect');
 const framePrevBtn = document.getElementById('framePrevBtn');
 const frameNextBtn = document.getElementById('frameNextBtn');
 const frameNameEl = document.getElementById('frameName');
+const stripScroller = document.getElementById('stripScroller');
 
 const SHOT_COUNT = 4;
 const FRAME_W = 500;   // px per photo cell at capture resolution
@@ -188,8 +186,8 @@ const PRINT_BOTTOM_MARGIN = 40;  // below the caption/date area
 // caption) this many px toward its own outer edge — left strip shifts left,
 // right strip shifts right — away from the shared middle cut line. Purely a
 // manual visual adjustment on top of the equal-margins layout below; doesn't
-// move the dashed cut line itself, and has no effect on buildStrip()/the
-// on-screen preview.
+// move the dashed cut line itself, and has no effect on renderAllFrames()/
+// the on-screen preview.
 const PRINT_OUTWARD_NUDGE = -2.5;
 
 // The strip itself always prints on plain white paper with dark ink, regardless
@@ -270,12 +268,11 @@ function applyPixelFilterMatrix(ctx, x, y, w, h, matrix) {
 
 // Themed frame overlays — a transparent PNG (same 560x[captionH-dependent]
 // layout as a single strip: see ARCHITECTURE.md "Themed frames") drawn on
-// top of drawStripContent()'s photos/caption, per strip. Cycled with the
-// arrow buttons beside the strip preview (see #framePrevBtn/#frameNextBtn
-// below) rather than a dropdown — an ordered array, not a keyed object, so
-// "next"/"previous" is just frameIndex +/- 1 with wraparound. `classic`
-// (index 0, the default) has `src: null` and draws nothing, leaving today's
-// plain-strip look unchanged. Free, per-viewer choice like
+// top of drawStripContent()'s photos/caption, per strip. Browsed via a
+// swipeable carousel (see "Frame carousel" below) — an ordered array, not a
+// keyed object, so "next"/"previous"/scroll-nearest is just an index into
+// it. `classic` (index 0, the default) has `src: null` and draws nothing,
+// leaving today's plain-strip look unchanged. Free, per-viewer choice like
 // photoFilter/dateStyle above — not part of the shared/lockable `config`.
 const FRAMES = [
   { key: 'classic', label: 'Classic', src: null },
@@ -285,11 +282,11 @@ const FRAMES = [
 ];
 let frameIndex = 0;
 
-// Cached by src so repeated buildStrip()/buildPrintCanvas() calls (every
-// filter/date/frame change re-renders) don't re-fetch the image each time.
+// Cached by src so repeated renderAllFrames() calls (every filter/date
+// change re-renders every slide) don't re-fetch each frame image each time.
 const frameImageCache = {};
-function loadFrameImage() {
-  const src = FRAMES[frameIndex].src;
+function loadFrameImageAt(index) {
+  const src = FRAMES[index].src;
   if (!src) return Promise.resolve(null);
   if (!frameImageCache[src]) {
     frameImageCache[src] = new Promise((resolve, reject) => {
@@ -532,8 +529,9 @@ function formatDate(date) {
   return date.toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' });
 }
 
-// Shared by buildStrip() (the real export) and renderCaptionPreview() (the
-// live customize-panel preview) so the two can never drift out of sync.
+// Shared by renderAllFrames() (the real export, all frame slides) and
+// renderCaptionPreview() (the live customize-panel preview) so the two can
+// never drift out of sync.
 function computeCaptionLayout() {
   const captionLine = config.caption.trim();
   const dateLine = (config.showDate && dateStyle !== 'off') ? formatDate(new Date()) : '';
@@ -591,8 +589,8 @@ function drawCaptionLines(ctx, centerX, top, layout) {
 }
 
 // Live preview shown in the customize panel, before any photos are taken.
-// Renders the same caption/date band buildStrip() will produce, at the same
-// pixel width, so it's an exact preview rather than an approximation.
+// Renders the same caption/date band renderAllFrames() will produce, at the
+// same pixel width, so it's an exact preview rather than an approximation.
 async function renderCaptionPreview() {
   await loadCaptionFonts();
   const layout = computeCaptionLayout();
@@ -608,10 +606,9 @@ async function renderCaptionPreview() {
 
 // Draws one strip's paper background, photos, caption, and (if set) the
 // themed frame overlay, at the given x offset within ctx — no cut-guide
-// border. Shared by buildStrip() (a single strip, which draws its own full
-// border after calling this) and buildPrintCanvas() (two strips side by
-// side sharing one outer border and one dividing line, rather than each
-// strip carrying its own).
+// border. Shared by renderAllFrames() (one call per frame slide) and
+// buildPrintCanvas() (two strips side by side sharing one outer border and
+// one dividing line, rather than each strip carrying its own).
 function drawStripContent(ctx, offsetX, stripW, photosH, layout, frameImg) {
   const stripH = PADDING * 2 + photosH + layout.captionH;
   ctx.fillStyle = STRIP_PAPER;
@@ -667,20 +664,44 @@ function stripDimensions() {
   return { stripW, photosH, stripH, layout };
 }
 
-// Used for the on-screen preview and for Save/Share — deliberately has NO
-// cut-guide border. The dashed border only makes sense on the print
-// formatting (buildPrintCanvas(), two strips meant to be cut apart) — a
-// single saved/shared image isn't going to be trimmed out of anything.
-async function buildStrip() {
-  const [, frameImg] = await Promise.all([loadCaptionFonts(), loadFrameImage()]);
-  const { stripW, photosH, stripH, layout } = stripDimensions();
-  stripCanvas.width = stripW;
-  stripCanvas.height = stripH;
-  const ctx = stripCanvas.getContext('2d');
+// One <canvas> per FRAMES entry, laid out side by side in #stripScroller (a
+// CSS scroll-snap carousel — see "Frame carousel" below) so swiping shows
+// real, already-rendered previews of neighboring frames rather than blank
+// placeholders. Built once at load; deliberately has NO cut-guide border on
+// any slide — that only exists on the separate print-formatting canvas
+// (buildPrintCanvas(), see "Print layout" below).
+const frameCanvases = FRAMES.map(() => {
+  const slide = document.createElement('div');
+  slide.className = 'strip-slide';
+  const canvas = document.createElement('canvas');
+  slide.appendChild(canvas);
+  stripScroller.appendChild(slide);
+  return canvas;
+});
 
-  // The strip is always plain white/dark ink — kept the same regardless of
-  // site theme so a printed strip looks like a real photobooth strip.
-  drawStripContent(ctx, 0, stripW, photosH, layout, frameImg);
+// The canvas actually used for Save/Share (see saveBtn/shareBtn below) —
+// whichever frame is currently centered in the carousel.
+function activeCanvas() {
+  return frameCanvases[frameIndex];
+}
+
+// Renders every frame's slide from the current shots/caption/filter state.
+// Unlike a single active canvas, ALL slides need to reflect the current
+// photos so the carousel shows accurate previews while swiping between
+// them, not stale ones left over from a previous session or setting.
+async function renderAllFrames() {
+  await loadCaptionFonts();
+  const { stripW, photosH, stripH, layout } = stripDimensions();
+  await Promise.all(FRAMES.map(async (frame, i) => {
+    const frameImg = await loadFrameImageAt(i);
+    const canvas = frameCanvases[i];
+    canvas.width = stripW;
+    canvas.height = stripH;
+    const ctx = canvas.getContext('2d');
+    // The strip is always plain white/dark ink — kept the same regardless
+    // of site theme so a printed strip looks like a real photobooth strip.
+    drawStripContent(ctx, 0, stripW, photosH, layout, frameImg);
+  }));
 }
 
 // Two copies of the strip side by side for printing, sharing ONE outer
@@ -689,7 +710,7 @@ async function buildStrip() {
 // double up into two adjacent lines (plus each strip's own small margin
 // inside its border) right where they meet.
 async function buildPrintCanvas() {
-  const [, frameImg] = await Promise.all([loadCaptionFonts(), loadFrameImage()]);
+  const [, frameImg] = await Promise.all([loadCaptionFonts(), loadFrameImageAt(frameIndex)]);
   const { stripW, photosH, stripH, layout } = stripDimensions();
   const inset = 5; // canvas edge -> dashed border line, unrelated to the margins below
 
@@ -723,8 +744,8 @@ async function buildPrintCanvas() {
   // Shift the two-strip block so it sits exactly PRINT_TOP_MARGIN /
   // PRINT_SIDE_MARGIN away from the dashed border on those sides — a
   // translate() rather than passing more offsets into drawStripContent(),
-  // so that shared function (also used by buildStrip(), unaffected by any
-  // of this) doesn't need to know about print-specific margins at all.
+  // so that shared function (also used by renderAllFrames(), unaffected by
+  // any of this) doesn't need to know about print-specific margins at all.
   const coreOffsetX = inset + PRINT_SIDE_MARGIN;
   const coreOffsetY = inset + PRINT_TOP_MARGIN;
   ctx.save();
@@ -784,7 +805,7 @@ async function runSession() {
     await sleep(834);
   }
 
-  await buildStrip();
+  await renderAllFrames();
   stripWrap.style.display = 'flex';
   startBtn.disabled = false;
   startBtn.style.display = 'inline-block';
@@ -799,7 +820,7 @@ againBtn.addEventListener('click', () => {
 function downloadStripPng() {
   const link = document.createElement('a');
   link.download = `portabooth-${Date.now()}.png`;
-  link.href = stripCanvas.toDataURL('image/png');
+  link.href = activeCanvas().toDataURL('image/png');
   link.click();
 }
 
@@ -838,7 +859,7 @@ saveBtn.addEventListener('click', () => {
     downloadStripPng();
     return;
   }
-  stripCanvas.toBlob(async (blob) => {
+  activeCanvas().toBlob(async (blob) => {
     const file = new File([blob], `portabooth-${Date.now()}.png`, { type: 'image/png' });
     try {
       await navigator.share({ files: [file] });
@@ -924,7 +945,7 @@ if (navigator.canShare) {
   shareBtn.style.display = 'inline-block';
 }
 shareBtn.addEventListener('click', () => {
-  stripCanvas.toBlob(async (blob) => {
+  activeCanvas().toBlob(async (blob) => {
     const file = new File([blob], 'portabooth.png', { type: 'image/png' });
     if (navigator.canShare && navigator.canShare({ files: [file] })) {
       try {
@@ -948,7 +969,7 @@ function onConfigFieldChange() {
   applySiteTheme(config.siteTheme);
   dateStyleField.style.display = config.showDate ? '' : 'none';
   renderCaptionPreview();
-  if (shots.length) buildStrip();
+  if (shots.length) renderAllFrames();
 }
 siteThemeSelect.addEventListener('change', onConfigFieldChange);
 captionInput.addEventListener('input', onConfigFieldChange);
@@ -961,22 +982,76 @@ showDateInput.addEventListener('change', onConfigFieldChange);
 // shared template.
 dateStyleSelect.addEventListener('change', () => {
   dateStyle = dateStyleSelect.value;
-  if (shots.length) buildStrip();
+  if (shots.length) renderAllFrames();
 });
 
 filterSelect.addEventListener('change', () => {
   photoFilter = filterSelect.value;
-  if (shots.length) buildStrip();
+  if (shots.length) renderAllFrames();
 });
 
-function setFrameIndex(newIndex) {
-  frameIndex = (newIndex + FRAMES.length) % FRAMES.length;
+// Frame carousel: #stripScroller is a CSS scroll-snap carousel (see
+// style.css) holding one already-rendered slide per FRAMES entry (built in
+// renderAllFrames() above), so swiping between them shows real previews of
+// neighboring frames rather than blank placeholders — no re-render needed
+// on navigation, only frameIndex/#frameName need to track whichever slide
+// ends up centered.
+function setActiveFrameIndex(index) {
+  frameIndex = index;
   frameNameEl.textContent = FRAMES[frameIndex].label;
-  if (shots.length) buildStrip();
 }
 
-framePrevBtn.addEventListener('click', () => setFrameIndex(frameIndex - 1));
-frameNextBtn.addEventListener('click', () => setFrameIndex(frameIndex + 1));
+function scrollToFrame(index, behavior) {
+  const slide = stripScroller.children[index];
+  if (!slide) return;
+  stripScroller.scrollTo({
+    left: slide.offsetLeft - (stripScroller.clientWidth - slide.clientWidth) / 2,
+    behavior,
+  });
+}
+
+framePrevBtn.addEventListener('click', () => {
+  scrollToFrame((frameIndex - 1 + FRAMES.length) % FRAMES.length, 'smooth');
+});
+frameNextBtn.addEventListener('click', () => {
+  scrollToFrame((frameIndex + 1) % FRAMES.length, 'smooth');
+});
+
+// Whichever slide's center is closest to the scroller's own center is the
+// "current" one — used both to sync frameIndex/#frameName after a swipe
+// settles, and (via scrollToFrame() above) to know where to scroll to for
+// arrow-button navigation.
+function nearestFrameIndexToScroll() {
+  const center = stripScroller.scrollLeft + stripScroller.clientWidth / 2;
+  let nearest = 0;
+  let nearestDist = Infinity;
+  Array.from(stripScroller.children).forEach((slide, i) => {
+    const dist = Math.abs((slide.offsetLeft + slide.clientWidth / 2) - center);
+    if (dist < nearestDist) { nearestDist = dist; nearest = i; }
+  });
+  return nearest;
+}
+
+// Fires once a swipe/scroll (from touch, trackpad, or the arrow buttons'
+// scrollTo()) comes to rest, so frameIndex/#frameName — and therefore
+// Save/Share/Print, which read activeCanvas()/frameIndex — always reflect
+// whatever's actually centered on screen, not just direct arrow clicks.
+// 'scrollend' (Chrome/Firefox/Safari 18+) fires exactly once per gesture;
+// where it's unsupported (older Safari), fall back to a debounced 'scroll'
+// listener that waits for scrolling to stop.
+function onScrollSettled() {
+  const index = nearestFrameIndexToScroll();
+  if (index !== frameIndex) setActiveFrameIndex(index);
+}
+if ('onscrollend' in window) {
+  stripScroller.addEventListener('scrollend', onScrollSettled);
+} else {
+  let scrollSettleTimer;
+  stripScroller.addEventListener('scroll', () => {
+    clearTimeout(scrollSettleTimer);
+    scrollSettleTimer = setTimeout(onScrollSettled, 120);
+  });
+}
 
 // qrcodejs (vendored in qrcode.min.js) uses a fixed QR "type" (matrix size) per
 // call and throws if the payload doesn't fit — grow the type until it fits
