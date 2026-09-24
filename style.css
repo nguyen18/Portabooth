@@ -402,9 +402,6 @@ button.ghost {
 
 .strip-carousel-row {
   display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 10px;
   width: 100%;
 }
 
@@ -414,8 +411,10 @@ button.ghost {
    padding, so the centered slide's neighbors peek in at the edges — that
    peek is the point (see the project owner's ask for this layout), not a
    sizing accident. scroll-snap-type/scroll-padding-inline make swipes (via
-   touch, trackpad, or #framePrevBtn/#frameNextBtn's scrollTo() in JS) settle
-   with a slide centered rather than at an arbitrary scroll offset. */
+   touch, trackpad, or #framePrevBtn/#frameNextBtn's scrollTo() in JS, called
+   from the arrows beside #frameName below the carousel — not beside the
+   carousel itself) settle with a slide centered rather than at an arbitrary
+   scroll offset. */
 .strip-scroller {
   flex: 1;
   min-width: 0;
@@ -475,11 +474,22 @@ button.ghost {
   box-shadow: none;
 }
 
+.frame-name-row {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+}
+
 .frame-name {
   font-size: 0.85rem;
   font-style: italic;
   color: var(--bulb);
   text-align: center;
+  /* Fits the longest current FRAMES label ("Engagement (Yellow)", ~132px at
+     this font) with a little headroom, so the arrows don't visibly shift
+     position as the label changes length while cycling through frames. */
+  min-width: 140px;
 }
 
 .save-row {
